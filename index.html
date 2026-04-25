@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="nl">
+<html lang="it">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Scheepskompas — Terrein Navigatie</title>
+<title>Bussola Terreno — Terrein Kompas</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=IM+Fell+English:ital@0;1&family=Cinzel:wght@400;700&display=swap');
@@ -17,6 +17,7 @@
     --gold-home:   #ffd700;
     --green-vac:   #2ecc71;
     --orange-pers: #ff8c00;
+    --blue-you:    #2288ff;
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -25,32 +26,64 @@
     background: var(--bg);
     color: var(--cream);
     font-family: 'IM Fell English', Georgia, serif;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
+    display: flex; flex-direction: column; align-items: center;
     min-height: 100vh;
     padding: 10px 8px 28px;
     overflow-x: hidden;
   }
 
-  h1 {
-    font-family: 'Cinzel', serif;
-    font-size: clamp(0.85rem, 3vw, 1.15rem);
-    letter-spacing: 0.18em;
-    color: var(--brass);
-    text-align: center;
-    margin-bottom: 8px;
-    text-shadow: 0 0 18px rgba(200,150,40,0.4);
-  }
+  /* ═══════════════════════════════
+     SCHERMWISSELS
+  ═══════════════════════════════ */
+  .screen { display: none; width: 100%; max-width: 460px; flex-direction: column; align-items: center; }
+  .screen.active { display: flex; }
 
-  /* ── KOMPAS WRAP ── */
+  /* ═══════════════════════════════
+     TAAL SCHAKELAAR
+  ═══════════════════════════════ */
+  .lang-bar {
+    display: flex; gap: 6px; align-items: center;
+    width: 100%; max-width: 460px;
+    margin-bottom: 6px; justify-content: flex-end;
+  }
+  .lang-btn {
+    background: rgba(200,160,40,.12); border: 1px solid var(--brass-dark);
+    color: var(--brass); font-family: 'Cinzel',serif; font-size: .58rem;
+    letter-spacing: .08em; padding: 3px 8px; border-radius: 2px; cursor: pointer;
+  }
+  .lang-btn.active { background: rgba(200,160,40,.35); border-color: var(--brass); }
+
+  /* ═══════════════════════════════
+     TOPBALK
+  ═══════════════════════════════ */
+  .top-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    width: 100%; max-width: 460px;
+    margin-bottom: 6px;
+  }
+  .top-bar h1 {
+    font-family: 'Cinzel',serif;
+    font-size: clamp(.8rem,2.8vw,1.1rem);
+    letter-spacing: .16em; color: var(--brass);
+    text-shadow: 0 0 18px rgba(200,150,40,.4);
+  }
+  .top-icon-btn {
+    background: rgba(200,160,40,.1); border: 1px solid var(--brass-dark);
+    color: var(--brass); font-size: 1.1rem; width: 34px; height: 34px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 2px; cursor: pointer; flex-shrink: 0;
+    transition: background .2s;
+  }
+  .top-icon-btn:active { background: rgba(200,160,40,.3); }
+
+  /* ═══════════════════════════════
+     KOMPAS
+  ═══════════════════════════════ */
   .compass-wrap {
     position: relative;
-    width: min(92vw, 430px);
-    height: min(92vw, 430px);
+    width: min(92vw,430px); height: min(92vw,430px);
     flex-shrink: 0;
   }
-
   .compass-rim {
     position: absolute; inset: 0; border-radius: 50%;
     background: conic-gradient(
@@ -58,44 +91,32 @@
       #7a5c0a 180deg,#c9972a 225deg,#f0c040 270deg,#c9972a 315deg,#7a5c0a 360deg);
     box-shadow: 0 0 0 4px #2a1c04,0 0 40px 8px rgba(0,0,0,.85),inset 0 0 12px rgba(0,0,0,.6);
   }
-
   .degree-ring {
     position: absolute; inset: 5%; border-radius: 50%;
     background: #1e160a; z-index: 2;
   }
   svg#ring-svg { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 3; }
 
-  /* ── KAARTVENSTER ── */
+  /* Kaartvenster */
   .map-viewport {
-    position: absolute; inset: 17%;
-    border-radius: 50%; overflow: hidden;
-    z-index: 4;
+    position: absolute; inset: 17%; border-radius: 50%; overflow: hidden;
+    z-index: 4; background: #3a4a3a;
     box-shadow: inset 0 0 20px rgba(0,0,0,.65), 0 0 0 2px #4a3605;
-    background: #3a4a3a;
+    transition: opacity .3s;
   }
-
-  /* Kaart 200% groot zodat rotatie nooit witte rand toont */
   #map {
-    position: absolute;
-    width: 200%; height: 200%;
-    top: -50%; left: -50%;
-    transform-origin: 50% 50%;
-    /* geen CSS transition hier — wordt via JS op animationframe gedaan */
-    z-index: 1;
+    position: absolute; width: 200%; height: 200%;
+    top: -50%; left: -50%; transform-origin: 50% 50%; z-index: 1;
   }
-
-  /* Vintage sepia-waas over de kaart */
   .map-overlay {
     position: absolute; inset: 0; border-radius: 50%;
-    background: rgba(120,70,10,0.22);
-    pointer-events: none; z-index: 6;
+    background: rgba(120,70,10,.2); pointer-events: none; z-index: 6;
     mix-blend-mode: multiply;
   }
-
-  .leaflet-control-attribution { font-size: 7px !important; opacity: 0.4; }
+  .leaflet-control-attribution { font-size: 7px !important; opacity: .4; }
   .leaflet-control-zoom { display: none !important; }
 
-  /* Jij — statisch middelpunt, draait nooit mee */
+  /* Jij — BLAUW, statisch middelpunt */
   .you-dot {
     position: absolute; top: 50%; left: 50%;
     width: 18px; height: 18px;
@@ -103,112 +124,109 @@
     z-index: 20; pointer-events: none;
   }
   .you-dot::after {
-    content: '';
-    position: absolute; inset: 0; border-radius: 50%;
-    background: radial-gradient(circle at 35% 30%, #fff 0%, #3af 45%, #06c 100%);
-    border: 2px solid #fff;
-    box-shadow: 0 0 10px rgba(0,120,255,.9), 0 0 0 5px rgba(0,120,255,.15);
+    content:''; position: absolute; inset: 0; border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #aaddff 0%, var(--blue-you) 45%, #0044cc 100%);
+    border: 2.5px solid #fff;
+    box-shadow: 0 0 12px rgba(30,130,255,.9), 0 0 0 5px rgba(30,130,255,.18);
     animation: pulse 2s ease-in-out infinite;
   }
   @keyframes pulse {
-    0%,100% { box-shadow: 0 0 10px rgba(0,120,255,.9),0 0 0 5px rgba(0,120,255,.12); }
-    50%      { box-shadow: 0 0 16px rgba(0,120,255,1), 0 0 0 9px rgba(0,120,255,.06); }
+    0%,100% { box-shadow: 0 0 12px rgba(30,130,255,.9),0 0 0 5px rgba(30,130,255,.15); }
+    50%      { box-shadow: 0 0 20px rgba(30,130,255,1), 0 0 0 9px rgba(30,130,255,.07); }
   }
 
-  /* Zoom knoppen boven kaartvenster */
+  /* Zoom */
   .zoom-bar {
-    position: absolute; left: 18.5%; top: 50%;
-    transform: translateY(-50%);
+    position: absolute; left: 18%; top: 50%; transform: translateY(-50%);
     z-index: 30; display: flex; flex-direction: column; gap: 4px;
   }
   .zoom-btn {
-    width: 26px; height: 26px;
-    background: rgba(20,12,4,.88);
-    border: 1px solid var(--brass-dark);
-    color: var(--brass); font-size: 1rem;
-    display: flex; align-items: center; justify-content: center;
-    cursor: pointer; border-radius: 2px; user-select: none;
-    font-family: 'Cinzel', serif;
+    width: 28px; height: 28px; background: rgba(20,12,4,.9);
+    border: 1px solid var(--brass-dark); color: var(--brass);
+    font-size: 1.05rem; display: flex; align-items: center; justify-content: center;
+    cursor: pointer; border-radius: 2px; font-family: 'Cinzel',serif; user-select: none;
   }
 
-  /* Kaart aan/uit */
+  /* Kaart-toggle */
   .map-toggle {
-    position: absolute; bottom: 18.5%; right: 18.5%;
-    z-index: 30;
-    background: rgba(20,12,4,.88);
-    border: 1px solid var(--brass-dark);
-    color: var(--brass); font-size: 0.62rem;
-    font-family: 'Cinzel', serif; letter-spacing: .05em;
-    padding: 4px 6px; border-radius: 2px; cursor: pointer;
+    position: absolute; bottom: 18%; right: 18%;
+    z-index: 30; background: rgba(20,12,4,.9);
+    border: 1px solid var(--brass-dark); color: var(--brass);
+    font-size: .58rem; font-family: 'Cinzel',serif; letter-spacing: .05em;
+    padding: 4px 7px; border-radius: 2px; cursor: pointer;
   }
 
-  /* ── NAALD ── */
+  /* TTS knop op kompas */
+  .tts-compass-btn {
+    position: absolute; bottom: 18%; left: 18%;
+    z-index: 30; background: rgba(20,12,4,.9);
+    border: 1px solid var(--brass-dark); color: var(--brass);
+    font-size: .9rem; padding: 4px 7px; border-radius: 2px; cursor: pointer;
+    font-family: 'Cinzel',serif; letter-spacing: .05em;
+  }
+
+  /* Naald */
   #needle-layer {
     position: absolute; inset: 17%; border-radius: 50%;
     z-index: 22; pointer-events: none;
   }
   #needle-svg {
-    width: 100%; height: 100%;
-    transform-origin: center center;
-    transition: transform 0.45s cubic-bezier(.25,.46,.45,.94);
+    width: 100%; height: 100%; transform-origin: center center;
+    transition: transform .45s cubic-bezier(.25,.46,.45,.94);
   }
 
-  /* Waypoint-stippen op ring */
+  /* Stippen op ring */
   .ring-dot {
-    position: absolute;
-    width: 14px; height: 14px; border-radius: 50%;
-    border: 2px solid rgba(255,255,255,.5);
-    transform: translate(-50%,-50%);
-    z-index: 9; display: none;
-    box-shadow: 0 0 8px currentColor;
-    transition: left .4s ease, top .4s ease;
+    position: absolute; width: 14px; height: 14px; border-radius: 50%;
+    border: 2px solid rgba(255,255,255,.5); transform: translate(-50%,-50%);
+    z-index: 9; display: none; box-shadow: 0 0 8px currentColor;
+    transition: left .4s ease,top .4s ease;
   }
-  .ring-dot.active-dot { width: 18px; height: 18px; border-color: #fff; }
+  .ring-dot.active-dot { width: 19px; height: 19px; border-color: #fff; }
 
   /* Glasglans */
   .glass-layer {
     position: absolute; inset: 17%; border-radius: 50%;
-    background: radial-gradient(ellipse at 28% 22%, rgba(255,255,255,.12) 0%, transparent 52%);
+    background: radial-gradient(ellipse at 28% 22%,rgba(255,255,255,.12) 0%,transparent 52%);
     z-index: 25; pointer-events: none;
   }
-
   .center-pin {
     position: absolute; top: 50%; left: 50%;
     width: 18px; height: 18px; border-radius: 50%;
     background: radial-gradient(circle at 35% 30%,#fff8d0,#c9972a 50%,#5e3a00);
-    border: 1px solid #2a1c04;
-    transform: translate(-50%,-50%);
+    border: 1px solid #2a1c04; transform: translate(-50%,-50%);
     z-index: 26; box-shadow: 0 0 6px rgba(0,0,0,.7);
   }
-
   .cardinal {
-    position: absolute; font-family: 'Cinzel', serif;
-    font-size: clamp(8px,2vw,13px); font-weight: 700;
-    color: var(--brass); z-index: 8;
-    transform: translate(-50%,-50%);
+    position: absolute; font-family: 'Cinzel',serif;
+    font-size: clamp(8px,2vw,13px); font-weight: 700; color: var(--brass);
+    z-index: 8; transform: translate(-50%,-50%);
     text-shadow: 0 0 5px rgba(0,0,0,.9); pointer-events: none;
   }
 
-  /* ── INFO PANEL ── */
+  /* ═══════════════════════════════
+     INFO PANEL
+  ═══════════════════════════════ */
   .info-panel {
-    margin-top: 11px; width: min(92vw,430px);
-    background: rgba(20,12,4,.93);
-    border: 1px solid var(--brass-dark); border-radius: 3px;
-    padding: 8px 14px;
+    margin-top: 10px; width: min(92vw,430px);
+    background: rgba(20,12,4,.93); border: 1px solid var(--brass-dark);
+    border-radius: 3px; padding: 8px 14px;
   }
   .status-row {
     display: flex; justify-content: space-between; flex-wrap: wrap; gap: 4px;
-    color: var(--brass); font-family: 'Cinzel', serif;
-    font-size: clamp(.58rem,1.7vw,.7rem); letter-spacing: .05em;
+    color: var(--brass); font-family: 'Cinzel',serif;
+    font-size: clamp(.56rem,1.6vw,.68rem); letter-spacing: .05em;
   }
   .dist-badge {
-    font-size: clamp(1rem,4vw,1.4rem); font-family: 'Cinzel', serif;
+    font-size: clamp(1rem,4vw,1.4rem); font-family: 'Cinzel',serif;
     color: var(--cream); text-align: center; margin: 5px 0 2px; letter-spacing: .1em;
   }
-  .dist-label { text-align: center; font-size: .67rem; color: var(--brass-dark); letter-spacing: .1em; }
-  #heading-display { text-align: center; font-size: .62rem; color: rgba(200,160,40,.5); margin-top: 2px; }
+  .dist-label { text-align: center; font-size: .66rem; color: var(--brass-dark); letter-spacing: .1em; }
+  #heading-display { text-align: center; font-size: .6rem; color: rgba(200,160,40,.5); margin-top: 2px; }
 
-  /* ── WAYPOINTS ── */
+  /* ═══════════════════════════════
+     WAYPOINTS
+  ═══════════════════════════════ */
   .waypoints { margin-top: 10px; width: min(92vw,430px); }
 
   .wp-block {
@@ -227,7 +245,7 @@
   .wp-block.dest .wp-dot  { background: var(--red-dest);    box-shadow: 0 0 5px var(--red-dest); }
   .wp-block.pers .wp-dot  { background: var(--orange-pers); box-shadow: 0 0 5px var(--orange-pers); }
 
-  .wp-label { font-family: 'Cinzel', serif; font-size: .64rem; letter-spacing: .1em; flex: 1; }
+  .wp-label { font-family: 'Cinzel',serif; font-size: .63rem; letter-spacing: .09em; flex: 1; }
   .wp-block.home .wp-label { color: var(--gold-home); }
   .wp-block.vac  .wp-label { color: var(--green-vac); }
   .wp-block.dest .wp-label { color: var(--red-dest); }
@@ -235,28 +253,29 @@
 
   .wp-row { display: flex; gap: 5px; }
   .wp-input {
-    flex: 1; min-width: 0;
-    background: rgba(0,0,0,.5); border: 1px solid rgba(200,160,40,.3);
-    color: var(--cream); font-family: 'IM Fell English', serif;
-    font-size: .78rem; padding: 5px 7px; border-radius: 2px; outline: none;
+    flex: 1; min-width: 0; background: rgba(0,0,0,.5);
+    border: 1px solid rgba(200,160,40,.3); color: var(--cream);
+    font-family: 'IM Fell English',serif; font-size: .78rem;
+    padding: 5px 7px; border-radius: 2px; outline: none;
   }
   .wp-input:focus { border-color: var(--brass); }
   .wp-input::placeholder { color: rgba(200,160,40,.3); }
 
   .wp-btn {
     background: rgba(200,160,40,.1); border: 1px solid var(--brass-dark);
-    color: var(--brass); font-family: 'Cinzel', serif;
-    font-size: .59rem; letter-spacing: .07em; padding: 5px 8px;
+    color: var(--brass); font-family: 'Cinzel',serif;
+    font-size: .58rem; letter-spacing: .07em; padding: 5px 8px;
     cursor: pointer; border-radius: 2px; white-space: nowrap; transition: background .15s;
   }
   .wp-btn:active { background: rgba(200,160,40,.3); }
-  .wp-dist { font-size: .63rem; color: rgba(200,160,40,.55); margin-top: 3px; min-height: 13px; }
+  .wp-dist { font-size: .62rem; color: rgba(200,160,40,.55); margin-top: 3px; min-height: 13px; }
 
   .target-selector { display: flex; gap: 5px; margin-bottom: 8px; }
   .target-btn {
     flex: 1; padding: 6px 2px; border-radius: 2px;
-    font-family: 'Cinzel', serif; font-size: .56rem; letter-spacing: .04em;
-    cursor: pointer; border: 1px solid; text-align: center; opacity: .45; transition: all .2s;
+    font-family: 'Cinzel',serif; font-size: .54rem; letter-spacing: .04em;
+    cursor: pointer; border: 1px solid; text-align: center;
+    opacity: .45; transition: all .2s;
   }
   .target-btn.active { opacity: 1; }
   .target-btn.home-t { border-color: var(--gold-home);   color: var(--gold-home);   background: rgba(255,215,0,.07); }
@@ -270,257 +289,538 @@
 
   .start-row { display: flex; gap: 7px; margin-top: 7px; }
   .main-btn {
-    flex: 1; padding: 9px;
-    background: rgba(200,160,40,.1); border: 1px solid var(--brass);
-    color: var(--brass); font-family: 'Cinzel', serif;
-    font-size: .67rem; letter-spacing: .09em;
+    flex: 1; padding: 9px; background: rgba(200,160,40,.1);
+    border: 1px solid var(--brass); color: var(--brass);
+    font-family: 'Cinzel',serif; font-size: .65rem; letter-spacing: .09em;
     cursor: pointer; border-radius: 2px; transition: background .2s;
   }
   .main-btn:active { background: rgba(200,160,40,.28); }
 
   .error-msg {
-    color: #e07070; font-size: .67rem; text-align: center;
+    color: #e07070; font-size: .66rem; text-align: center;
     margin-top: 5px; min-height: 15px; font-style: italic;
   }
+
+  /* ═══════════════════════════════
+     HANDLEIDING / MANUALE
+  ═══════════════════════════════ */
+  .manual-screen {
+    padding: 0 4px 20px;
+  }
+  .manual-back {
+    display: flex; align-items: center; gap: 8px;
+    margin-bottom: 14px; cursor: pointer;
+    color: var(--brass); font-family: 'Cinzel',serif;
+    font-size: .7rem; letter-spacing: .1em;
+    border: 1px solid var(--brass-dark); border-radius: 2px;
+    padding: 7px 14px; background: rgba(200,160,40,.08);
+    align-self: flex-start;
+    transition: background .2s;
+  }
+  .manual-back:active { background: rgba(200,160,40,.25); }
+
+  .manual-title {
+    font-family: 'Cinzel',serif; font-size: clamp(.9rem,3vw,1.1rem);
+    letter-spacing: .15em; color: var(--brass);
+    text-align: center; margin-bottom: 16px;
+    text-shadow: 0 0 14px rgba(200,150,40,.4);
+  }
+
+  .manual-section {
+    background: rgba(20,12,4,.88); border: 1px solid var(--brass-dark);
+    border-radius: 3px; padding: 12px 14px; margin-bottom: 10px; width: 100%;
+  }
+  .manual-section h3 {
+    font-family: 'Cinzel',serif; font-size: .72rem; letter-spacing: .12em;
+    color: var(--brass); margin-bottom: 8px; display: flex; align-items: center; gap: 8px;
+  }
+  .manual-section p, .manual-section li {
+    font-size: .73rem; line-height: 1.6; color: var(--cream); opacity: .85;
+    margin-bottom: 4px;
+  }
+  .manual-section ul { padding-left: 14px; }
+  .manual-section .it { color: var(--cream); }
+  .manual-section .nl { color: rgba(200,160,40,.6); font-style: italic; font-size: .68rem; }
+
+  .dot-legend {
+    display: flex; flex-direction: column; gap: 7px; margin-top: 6px;
+  }
+  .dot-row {
+    display: flex; align-items: center; gap: 10px;
+  }
+  .dot-swatch {
+    width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0;
+    border: 2px solid rgba(255,255,255,.4);
+  }
+  .dot-txt { font-size: .7rem; line-height: 1.4; }
+  .dot-txt .it { display: block; }
+  .dot-txt .nl { display: block; color: rgba(200,160,40,.55); font-style: italic; font-size: .64rem; }
+
+  /* TTS indicator */
+  .tts-indicator {
+    display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+    background: #2ecc71; margin-left: 6px; vertical-align: middle;
+    animation: blink 1s ease-in-out infinite;
+    display: none;
+  }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.2} }
 </style>
 </head>
 <body>
 
-<h1>⚓ TERREIN KOMPAS ⚓</h1>
-
-<div class="compass-wrap" id="compass">
-
-  <div class="compass-rim"></div>
-
-  <div class="degree-ring">
-    <svg id="ring-svg" viewBox="0 0 400 400"></svg>
-  </div>
-
-  <!-- N Z O W -->
-  <div class="cardinal" style="top:8%;left:50%">N</div>
-  <div class="cardinal" style="top:92%;left:50%">Z</div>
-  <div class="cardinal" style="top:50%;left:93%">O</div>
-  <div class="cardinal" style="top:50%;left:7%">W</div>
-
-  <!-- Waypoint-stippen op ring -->
-  <div class="ring-dot" id="dot-home" style="color:var(--gold-home);background:var(--gold-home)"></div>
-  <div class="ring-dot" id="dot-vac"  style="color:var(--green-vac);background:var(--green-vac)"></div>
-  <div class="ring-dot" id="dot-dest" style="color:var(--red-dest);background:var(--red-dest)"></div>
-  <div class="ring-dot" id="dot-pers" style="color:var(--orange-pers);background:var(--orange-pers)"></div>
-
-  <!-- Kaart venster -->
-  <div class="map-viewport" id="map-viewport">
-    <div id="map"></div>
-    <div class="map-overlay"></div>
-  </div>
-
-  <!-- Jouw positie (statisch midden) -->
-  <div class="you-dot" id="you-dot"></div>
-
-  <!-- Zoom -->
-  <div class="zoom-bar">
-    <div class="zoom-btn" onclick="doZoom(1)">+</div>
-    <div class="zoom-btn" onclick="doZoom(-1)">−</div>
-  </div>
-
-  <!-- Kaart aan/uit -->
-  <div class="map-toggle" id="map-toggle" onclick="toggleMap()">🗺 KAART</div>
-
-  <!-- Naald -->
-  <div id="needle-layer">
-    <svg id="needle-svg" viewBox="0 0 200 200">
-      <defs>
-        <filter id="ns" x="-30%" y="-30%" width="160%" height="160%">
-          <feDropShadow dx="0" dy="0" stdDeviation="3" flood-color="rgba(0,0,0,.6)"/>
-        </filter>
-      </defs>
-      <polygon points="100,18 109,92 100,104 91,92"  fill="#cc2222" filter="url(#ns)"/>
-      <polygon points="100,18 104,36 100,50 96,36"   fill="#ff5555" opacity=".5"/>
-      <polygon points="100,182 109,108 100,96 91,108" fill="#2a1c04" filter="url(#ns)"/>
-      <polygon points="100,88 106,100 100,112 94,100" fill="#c9972a"/>
-    </svg>
-  </div>
-
-  <div class="glass-layer"></div>
-  <div class="center-pin"></div>
-
+<!-- ══════════════════════════════════════════
+     TAAL BALK
+══════════════════════════════════════════ -->
+<div class="lang-bar">
+  <span style="font-size:.58rem;color:var(--brass-dark);font-family:'Cinzel',serif;letter-spacing:.08em">LINGUA / TAAL:</span>
+  <div class="lang-btn active" id="btn-lang-it" onclick="setLang('it')">🇮🇹 IT</div>
+  <div class="lang-btn"        id="btn-lang-nl" onclick="setLang('nl')">🇳🇱 NL</div>
 </div>
 
-<!-- Info panel -->
-<div class="info-panel">
-  <div class="status-row">
-    <span id="status-koers">Koers: —</span>
-    <span id="status-nauwk">Nauwkeurigheid: —</span>
-    <span id="status-gps">GPS: wacht…</span>
-  </div>
-  <div class="dist-badge" id="dist-main">— km</div>
-  <div class="dist-label"  id="dist-label">tot bestemming (hemelsbreed)</div>
-  <div id="heading-display"></div>
-</div>
+<!-- ══════════════════════════════════════════
+     KOMPAS SCHERM
+══════════════════════════════════════════ -->
+<div class="screen active" id="screen-compass">
 
-<!-- Waypoints -->
-<div class="waypoints">
-
-  <div class="target-selector">
-    <div class="target-btn home-t active" id="btn-t-home" onclick="setActiveTarget('home')">🏠 THUIS</div>
-    <div class="target-btn vac-t"         id="btn-t-vac"  onclick="setActiveTarget('vac')">🌿 VAKANTIE</div>
-    <div class="target-btn dest-t"        id="btn-t-dest" onclick="setActiveTarget('dest')">🎯 DOEL</div>
-    <div class="target-btn pers-t"        id="btn-t-pers" onclick="setActiveTarget('pers')">🧡 PERSOON</div>
-  </div>
-
-  <div class="wp-block home">
-    <div class="wp-header"><div class="wp-dot"></div><div class="wp-label">THUIS ADRES</div></div>
-    <div class="wp-row">
-      <input class="wp-input" id="inp-home" type="text" placeholder="Straat, Stad…" autocomplete="off" spellcheck="false">
-      <button class="wp-btn" onclick="geocodeWaypoint('home')">ZOEK</button>
-      <button class="wp-btn" onclick="useCurrentLocation('home')">📍</button>
+  <div class="top-bar">
+    <h1 id="app-title">⚓ BUSSOLA TERRENO ⚓</h1>
+    <div style="display:flex;gap:6px">
+      <div class="top-icon-btn" onclick="speak()" title="Parla / Spreek">🔊<span class="tts-indicator" id="tts-ind"></span></div>
+      <div class="top-icon-btn" onclick="showScreen('manual')" title="Manuale / Handleiding">📖</div>
     </div>
-    <div class="wp-dist" id="dist-home"></div>
   </div>
 
-  <div class="wp-block vac">
-    <div class="wp-header"><div class="wp-dot"></div><div class="wp-label">VAKANTIE / TUSSENSTOP</div></div>
-    <div class="wp-row">
-      <input class="wp-input" id="inp-vac" type="text" placeholder="Hotel, Camping, Stad…" autocomplete="off" spellcheck="false">
-      <button class="wp-btn" onclick="geocodeWaypoint('vac')">ZOEK</button>
+  <div class="compass-wrap" id="compass">
+    <div class="compass-rim"></div>
+    <div class="degree-ring"><svg id="ring-svg" viewBox="0 0 400 400"></svg></div>
+
+    <div class="cardinal" style="top:8%;left:50%">N</div>
+    <div class="cardinal" style="top:92%;left:50%">S</div>
+    <div class="cardinal" style="top:50%;left:93%">E</div>
+    <div class="cardinal" style="top:50%;left:7%">O</div>
+
+    <div class="ring-dot" id="dot-home" style="color:var(--gold-home);background:var(--gold-home)"></div>
+    <div class="ring-dot" id="dot-vac"  style="color:var(--green-vac);background:var(--green-vac)"></div>
+    <div class="ring-dot" id="dot-dest" style="color:var(--red-dest);background:var(--red-dest)"></div>
+    <div class="ring-dot" id="dot-pers" style="color:var(--orange-pers);background:var(--orange-pers)"></div>
+
+    <div class="map-viewport" id="map-viewport">
+      <div id="map"></div>
+      <div class="map-overlay"></div>
     </div>
-    <div class="wp-dist" id="dist-vac"></div>
-  </div>
 
-  <div class="wp-block dest">
-    <div class="wp-header"><div class="wp-dot"></div><div class="wp-label">BESTEMMING</div></div>
-    <div class="wp-row">
-      <input class="wp-input" id="inp-dest" type="text" placeholder="Bestemming, Landmark…" autocomplete="off" spellcheck="false">
-      <button class="wp-btn" onclick="geocodeWaypoint('dest')">ZOEK</button>
+    <!-- BLAUW — jij / tu -->
+    <div class="you-dot" id="you-dot"></div>
+
+    <div class="zoom-bar">
+      <div class="zoom-btn" onclick="doZoom(1)">+</div>
+      <div class="zoom-btn" onclick="doZoom(-1)">−</div>
     </div>
-    <div class="wp-dist" id="dist-dest"></div>
-  </div>
+    <div class="map-toggle" id="map-toggle" onclick="toggleMap()">🗺</div>
 
-  <div class="wp-block pers">
-    <div class="wp-header"><div class="wp-dot"></div><div class="wp-label">OP TE HALEN PERSOON</div></div>
-    <div class="wp-row">
-      <input class="wp-input" id="inp-pers" type="text" placeholder="Adres persoon…" autocomplete="off" spellcheck="false">
-      <button class="wp-btn" onclick="geocodeWaypoint('pers')">ZOEK</button>
+    <div id="needle-layer">
+      <svg id="needle-svg" viewBox="0 0 200 200">
+        <defs>
+          <filter id="ns" x="-30%" y="-30%" width="160%" height="160%">
+            <feDropShadow dx="0" dy="0" stdDeviation="3" flood-color="rgba(0,0,0,.6)"/>
+          </filter>
+        </defs>
+        <polygon points="100,18 109,92 100,104 91,92"   fill="#cc2222" filter="url(#ns)"/>
+        <polygon points="100,18 104,36 100,50 96,36"    fill="#ff5555" opacity=".5"/>
+        <polygon points="100,182 109,108 100,96 91,108" fill="#2a1c04" filter="url(#ns)"/>
+        <polygon points="100,88 106,100 100,112 94,100" fill="#c9972a"/>
+      </svg>
     </div>
-    <div class="wp-dist" id="dist-pers"></div>
+
+    <div class="glass-layer"></div>
+    <div class="center-pin"></div>
   </div>
 
-  <div class="start-row">
-    <button class="main-btn" onclick="startCompass()">▶ KOMPAS ACTIVEREN</button>
-    <button class="main-btn" onclick="saveWaypoints()" style="flex:0.42">💾 SLA OP</button>
+  <!-- Info panel -->
+  <div class="info-panel">
+    <div class="status-row">
+      <span id="status-koers">—</span>
+      <span id="status-nauwk">—</span>
+      <span id="status-gps">GPS: —</span>
+    </div>
+    <div class="dist-badge" id="dist-main">— km</div>
+    <div class="dist-label"  id="dist-label">—</div>
+    <div id="heading-display"></div>
   </div>
-  <div class="error-msg" id="error-msg"></div>
 
-</div>
+  <!-- Waypoints -->
+  <div class="waypoints">
+
+    <div class="target-selector">
+      <div class="target-btn home-t active" id="btn-t-home" onclick="setActiveTarget('home')">🏠 <span class="t" data-it="CASA" data-nl="THUIS">CASA</span></div>
+      <div class="target-btn vac-t"         id="btn-t-vac"  onclick="setActiveTarget('vac')">🌿 <span class="t" data-it="VACANZA" data-nl="VAKANTIE">VACANZA</span></div>
+      <div class="target-btn dest-t"        id="btn-t-dest" onclick="setActiveTarget('dest')">🎯 <span class="t" data-it="META" data-nl="DOEL">META</span></div>
+      <div class="target-btn pers-t"        id="btn-t-pers" onclick="setActiveTarget('pers')">🧡 <span class="t" data-it="PERSONA" data-nl="PERSOON">PERSONA</span></div>
+    </div>
+
+    <!-- Casa / Thuis -->
+    <div class="wp-block home">
+      <div class="wp-header"><div class="wp-dot"></div>
+        <div class="wp-label t" data-it="INDIRIZZO DI CASA" data-nl="THUIS ADRES">INDIRIZZO DI CASA</div>
+      </div>
+      <div class="wp-row">
+        <input class="wp-input" id="inp-home" type="text" autocomplete="off" spellcheck="false"
+          data-ph-it="Via, Città…" data-ph-nl="Straat, Stad…" placeholder="Via, Città…">
+        <button class="wp-btn t" data-it="CERCA" data-nl="ZOEK" onclick="geocodeWaypoint('home')">CERCA</button>
+        <button class="wp-btn" onclick="useCurrentLocation('home')" title="Posizione attuale / Huidige positie">📍</button>
+      </div>
+      <div class="wp-dist" id="dist-home"></div>
+    </div>
+
+    <!-- Vacanza / Vakantie -->
+    <div class="wp-block vac">
+      <div class="wp-header"><div class="wp-dot"></div>
+        <div class="wp-label t" data-it="VACANZA / TAPPA" data-nl="VAKANTIE / TUSSENSTOP">VACANZA / TAPPA</div>
+      </div>
+      <div class="wp-row">
+        <input class="wp-input" id="inp-vac" type="text" autocomplete="off" spellcheck="false"
+          data-ph-it="Hotel, Camping, Città…" data-ph-nl="Hotel, Camping, Stad…" placeholder="Hotel, Camping, Città…">
+        <button class="wp-btn t" data-it="CERCA" data-nl="ZOEK" onclick="geocodeWaypoint('vac')">CERCA</button>
+      </div>
+      <div class="wp-dist" id="dist-vac"></div>
+    </div>
+
+    <!-- Meta / Bestemming -->
+    <div class="wp-block dest">
+      <div class="wp-header"><div class="wp-dot"></div>
+        <div class="wp-label t" data-it="DESTINAZIONE" data-nl="BESTEMMING">DESTINAZIONE</div>
+      </div>
+      <div class="wp-row">
+        <input class="wp-input" id="inp-dest" type="text" autocomplete="off" spellcheck="false"
+          data-ph-it="Destinazione, Landmark…" data-ph-nl="Bestemming, Landmark…" placeholder="Destinazione, Landmark…">
+        <button class="wp-btn t" data-it="CERCA" data-nl="ZOEK" onclick="geocodeWaypoint('dest')">CERCA</button>
+      </div>
+      <div class="wp-dist" id="dist-dest"></div>
+    </div>
+
+    <!-- Persona / Persoon -->
+    <div class="wp-block pers">
+      <div class="wp-header"><div class="wp-dot"></div>
+        <div class="wp-label t" data-it="PERSONA DA RACCOGLIERE" data-nl="OP TE HALEN PERSOON">PERSONA DA RACCOGLIERE</div>
+      </div>
+      <div class="wp-row">
+        <input class="wp-input" id="inp-pers" type="text" autocomplete="off" spellcheck="false"
+          data-ph-it="Indirizzo persona…" data-ph-nl="Adres persoon…" placeholder="Indirizzo persona…">
+        <button class="wp-btn t" data-it="CERCA" data-nl="ZOEK" onclick="geocodeWaypoint('pers')">CERCA</button>
+      </div>
+      <div class="wp-dist" id="dist-pers"></div>
+    </div>
+
+    <div class="start-row">
+      <button class="main-btn t" data-it="▶ ATTIVA BUSSOLA" data-nl="▶ KOMPAS ACTIVEREN" onclick="startCompass()">▶ ATTIVA BUSSOLA</button>
+      <button class="main-btn t" data-it="💾 SALVA" data-nl="💾 SLA OP" onclick="saveWaypoints()" style="flex:.42">💾 SALVA</button>
+    </div>
+    <div class="error-msg" id="error-msg"></div>
+  </div>
+
+</div><!-- /screen-compass -->
+
+
+<!-- ══════════════════════════════════════════
+     HANDLEIDING / MANUALE SCHERM
+══════════════════════════════════════════ -->
+<div class="screen manual-screen" id="screen-manual">
+
+  <div class="manual-back" onclick="showScreen('compass')">
+    ← <span class="t" data-it="TORNA ALLA BUSSOLA" data-nl="TERUG NAAR KOMPAS">TORNA ALLA BUSSOLA</span>
+  </div>
+
+  <div class="manual-title t" data-it="📖 MANUALE D'USO" data-nl="📖 GEBRUIKSHANDLEIDING">📖 MANUALE D'USO</div>
+
+  <!-- Snel starten -->
+  <div class="manual-section">
+    <h3>🚀 <span class="it">Avvio rapido</span> <span class="nl">/ Snel starten</span></h3>
+    <p class="it">1. Inserisci i tuoi indirizzi nei quattro campi (Casa, Vacanza, Meta, Persona).</p>
+    <p class="nl">1. Vul je adressen in de vier velden in (Casa/Thuis, Vacanza, Meta/Doel, Persona/Persoon).</p>
+    <p class="it">2. Tocca <strong>CERCA</strong> per ogni indirizzo — richiede internet la prima volta.</p>
+    <p class="nl">2. Tik op <strong>CERCA/ZOEK</strong> voor elk adres — vereist internet de eerste keer.</p>
+    <p class="it">3. Tocca <strong>💾 SALVA</strong> — gli indirizzi vengono memorizzati, anche senza internet.</p>
+    <p class="nl">3. Tik op <strong>💾 SALVA/SLA OP</strong> — adressen worden opgeslagen, ook offline bruikbaar.</p>
+    <p class="it">4. Tocca <strong>▶ ATTIVA BUSSOLA</strong> per avviare GPS e bussola.</p>
+    <p class="nl">4. Tik op <strong>▶ ATTIVA BUSSOLA/KOMPAS</strong> om GPS en kompas te starten.</p>
+  </div>
+
+  <!-- De stippen uitgelegd -->
+  <div class="manual-section">
+    <h3>🔵 <span class="it">I punti sulla bussola</span> <span class="nl">/ De stippen op het kompas</span></h3>
+    <div class="dot-legend">
+      <div class="dot-row">
+        <div class="dot-swatch" style="background:var(--blue-you);box-shadow:0 0 8px var(--blue-you)"></div>
+        <div class="dot-txt">
+          <span class="it">🔵 BLU — Sei tu! Il punto fisso al centro della bussola.</span>
+          <span class="nl">Blauw — Dat ben jij! Staat altijd stilletjes in het midden.</span>
+        </div>
+      </div>
+      <div class="dot-row">
+        <div class="dot-swatch" style="background:var(--gold-home);box-shadow:0 0 8px var(--gold-home)"></div>
+        <div class="dot-txt">
+          <span class="it">🟡 ORO — Casa. Sul cerchio esterno indica la direzione di casa.</span>
+          <span class="nl">Goud — Thuis. Op de buitenring, geeft richting naar huis aan.</span>
+        </div>
+      </div>
+      <div class="dot-row">
+        <div class="dot-swatch" style="background:var(--green-vac);box-shadow:0 0 8px var(--green-vac)"></div>
+        <div class="dot-txt">
+          <span class="it">🟢 VERDE — Tappa/Vacanza. Direzione verso la sosta intermedia.</span>
+          <span class="nl">Groen — Vakantie/Tussenstop. Richting naar de tussenstop.</span>
+        </div>
+      </div>
+      <div class="dot-row">
+        <div class="dot-swatch" style="background:var(--red-dest);box-shadow:0 0 8px var(--red-dest)"></div>
+        <div class="dot-txt">
+          <span class="it">🔴 ROSSO — Destinazione. La tua meta principale. La freccia punta qui!</span>
+          <span class="nl">Rood — Bestemming. Jouw hoofddoel. De naald wijst hierheen!</span>
+        </div>
+      </div>
+      <div class="dot-row">
+        <div class="dot-swatch" style="background:var(--orange-pers);box-shadow:0 0 8px var(--orange-pers)"></div>
+        <div class="dot-txt">
+          <span class="it">🟠 ARANCIONE — Persona da raccogliere lungo il percorso.</span>
+          <span class="nl">Oranje — Op te halen persoon onderweg.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- De naald -->
+  <div class="manual-section">
+    <h3>🧭 <span class="it">La freccia / il funzionamento</span> <span class="nl">/ De naald</span></h3>
+    <p class="it">La punta <strong style="color:#cc2222">ROSSA</strong> della freccia punta sempre verso il bersaglio selezionato (il pulsante attivo in alto: Casa / Vacanza / Meta / Persona).</p>
+    <p class="nl">De <strong style="color:#cc2222">RODE</strong> punt wijst altijd naar het geselecteerde doel (de actieve knop bovenaan: Casa/Thuis, Vacanza, Meta/Doel, Persona).</p>
+    <p class="it" style="margin-top:6px">La freccia ruota con te — se vai nella direzione giusta, la punta rossa è in alto (12 ore).</p>
+    <p class="nl">De naald draait mee — als je de goede kant opgaat staat de rode punt recht omhoog (12 uur).</p>
+    <p class="it" style="margin-top:6px">I punti sul cerchio esterno mostrano sempre dove si trovano tutti i destinatari, anche quelli non attivi.</p>
+    <p class="nl">De stippen op de buitenring tonen altijd de richting van álle waypoints, ook de niet-actieve.</p>
+  </div>
+
+  <!-- De kaart -->
+  <div class="manual-section">
+    <h3>🗺 <span class="it">La mappa</span> <span class="nl">/ De kaart</span></h3>
+    <p class="it">La mappa OpenStreetMap ruota con te — "davanti a te" è sempre in alto (heading-up). Puoi vedere fiumi, ponti, sentieri e strade in anticipo.</p>
+    <p class="nl">De OpenStreetMap kaart draait met je mee — "voor je uit" staat altijd bovenaan. Je ziet rivieren, bruggen, paden en wegen van tevoren.</p>
+    <p class="it" style="margin-top:5px"><strong>+</strong> / <strong>−</strong> voor zoomen. <strong>🗺</strong> om de kaart te verbergen/tonen.</p>
+    <p class="nl" style="margin-top:2px"><strong>+</strong> / <strong>−</strong> voor in-/uitzoomen. <strong>🗺</strong> om kaart aan/uit te zetten.</p>
+    <p class="it" style="margin-top:5px">💡 <em>Consiglio offline:</em> naviga la zona a casa con WiFi — le tessere vengono salvate nella cache del browser. In campagna funziona senza internet!</p>
+    <p class="nl" style="margin-top:2px">💡 <em>Offline tip:</em> blader thuis de wandelzone door met wifi — tegels worden gecached. Buiten werkt het zonder internet!</p>
+  </div>
+
+  <!-- Spraak -->
+  <div class="manual-section">
+    <h3>🔊 <span class="it">Voce / TTS</span> <span class="nl">/ Spraak</span></h3>
+    <p class="it">Tocca il pulsante 🔊 in alto per ascoltare la direzione attuale, ad esempio:</p>
+    <p class="nl">Tik op 🔊 bovenaan om de huidige richting te horen, bijv.:</p>
+    <p class="it" style="margin-top:5px;color:var(--brass);font-style:italic">"Mantieni nord-ovest, 315 gradi. Distanza: 2,4 chilometri."</p>
+    <p class="nl" style="color:rgba(200,160,40,.6);font-style:italic;font-size:.64rem">"Houd noordwest aan, 315 graden. Afstand: 2,4 kilometer."</p>
+    <p class="it" style="margin-top:5px">La voce parla nella lingua selezionata (IT/NL).</p>
+    <p class="nl">De stem spreekt in de gekozen taal (IT/NL).</p>
+  </div>
+
+  <!-- Offline -->
+  <div class="manual-section">
+    <h3>📵 <span class="it">Uso offline</span> <span class="nl">/ Offline gebruik</span></h3>
+    <p class="it">Inserisci e salva tutti gli indirizzi <strong>a casa con WiFi</strong>. In zona senza segnale:</p>
+    <p class="nl">Voer thuis met WiFi alle adressen in en sla ze op. Onderweg zonder bereik:</p>
+    <ul style="margin-top:5px">
+      <li class="it">GPS funziona sempre (anche senza internet)</li>
+      <li class="nl" style="color:rgba(200,160,40,.6);font-style:italic;font-size:.65rem">GPS werkt altijd (ook zonder internet)</li>
+      <li class="it">La bussola funziona sempre</li>
+      <li class="nl" style="color:rgba(200,160,40,.6);font-style:italic;font-size:.65rem">Het kompas werkt altijd</li>
+      <li class="it">La distanza e la freccia funzionano sempre</li>
+      <li class="nl" style="color:rgba(200,160,40,.6);font-style:italic;font-size:.65rem">Afstand en naald werken altijd</li>
+      <li class="it">La mappa: solo se in cache</li>
+      <li class="nl" style="color:rgba(200,160,40,.6);font-style:italic;font-size:.65rem">Kaart: alleen als gecached</li>
+      <li class="it">Puoi inserire coordinate: <em>lat,lon</em> (es. 52.37,4.89)</li>
+      <li class="nl" style="color:rgba(200,160,40,.6);font-style:italic;font-size:.65rem">Je kunt coördinaten invoeren: <em>lat,lon</em> (bijv. 52.37,4.89)</li>
+    </ul>
+  </div>
+
+  <div class="manual-back" onclick="showScreen('compass')" style="margin-top:8px;align-self:center">
+    ← <span class="t" data-it="TORNA ALLA BUSSOLA" data-nl="TERUG NAAR KOMPAS">TORNA ALLA BUSSOLA</span>
+  </div>
+
+</div><!-- /screen-manual -->
+
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 'use strict';
 
-// ── STATE ──
-const S = {
-  lat: null, lon: null, heading: null, accuracy: null,
-  mapVisible: true, zoom: 16, mapReady: false,
-  waypoints: {
-    home: {lat:null,lon:null,name:''},
-    vac:  {lat:null,lon:null,name:''},
-    dest: {lat:null,lon:null,name:''},
-    pers: {lat:null,lon:null,name:''}
+// ═══════════════════════════════
+// TAAL
+// ═══════════════════════════════
+let LANG = localStorage.getItem('kompas_lang') || 'it';
+
+const T = {
+  it: {
+    course:  'Rotta',
+    acc:     'Precisione',
+    gps:     'GPS',
+    toLbl:   { home:'verso casa', vac:'verso la tappa', dest:'verso la destinazione', pers:'verso la persona' },
+    cardinal:['Nord','Nord-Nord-Est','Nord-Est','Est-Nord-Est','Est','Est-Sud-Est','Sud-Est','Sud-Sud-Est',
+              'Sud','Sud-Sud-Ovest','Sud-Ovest','Ovest-Sud-Ovest','Ovest','Ovest-Nord-Ovest','Nord-Ovest','Nord-Nord-Ovest'],
+    mapOn:   '🗺 MAPPA', mapOff:'🗺 OFF',
+    saved:   'Salvato ✓', found:'✓ Trovato',
+    noAddr:  'Indirizzo non trovato. Prova diversamente.',
+    noNet:   'Nessuna connessione. Digita: lat,lon (es. 52.37,4.89)',
+    coordOk: 'Coordinate impostate.',
+    noGps:   'GPS non ancora attivo. Prima attiva la bussola.',
+    posSet:  'Posizione corrente impostata.',
+    enterAddr:'Inserisci un indirizzo.',
+    search:  'Ricerca…',
+    ttsNone: 'Nessun dato disponibile. Attivare prima la bussola.',
+    ttsText: (card,deg,dist,unit) => `Mantieni ${card}, ${deg} gradi. Distanza: ${dist} ${unit}.`,
+    distUnit:['metro','metri','chilometro','chilometri'],
+    compassTitle: '⚓ BUSSOLA TERRENO ⚓',
   },
-  activeTarget: 'home'
+  nl: {
+    course:  'Koers',
+    acc:     'Nauwkeurigheid',
+    gps:     'GPS',
+    toLbl:   { home:'tot thuis', vac:'tot vakantieadres', dest:'tot bestemming', pers:'tot op te halen persoon' },
+    cardinal:['Noord','NNO','NO','ONO','Oost','OZO','ZO','ZZO','Zuid','ZZW','ZW','WZW','West','WNW','NW','NNW'],
+    mapOn:   '🗺 KAART', mapOff:'🗺 UIT',
+    saved:   'Opgeslagen ✓', found:'✓ Gevonden',
+    noAddr:  'Adres niet gevonden. Probeer anders.',
+    noNet:   'Geen internet. Typ: lat,lon (bijv. 52.37,4.89)',
+    coordOk: 'Coördinaten ingesteld.',
+    noGps:   'GPS nog niet actief. Druk eerst op Kompas Activeren.',
+    posSet:  'Huidige positie ingesteld.',
+    enterAddr:'Voer een adres in.',
+    search:  'Zoeken…',
+    ttsNone: 'Geen data beschikbaar. Activeer eerst het kompas.',
+    ttsText: (card,deg,dist,unit) => `Houd ${card} aan, ${deg} graden. Afstand: ${dist} ${unit}.`,
+    distUnit:['meter','meter','kilometer','kilometer'],
+    compassTitle: '⚓ TERREIN KOMPAS ⚓',
+  }
 };
 
-const WP_COLOR = {home:'#ffd700',vac:'#2ecc71',dest:'#cc2222',pers:'#ff8c00'};
-const WP_LABEL = {home:'tot thuis',vac:'tot vakantieadres',dest:'tot bestemming',pers:'tot op te halen persoon'};
+function setLang(l) {
+  LANG = l;
+  localStorage.setItem('kompas_lang', l);
+  document.getElementById('btn-lang-it').classList.toggle('active', l==='it');
+  document.getElementById('btn-lang-nl').classList.toggle('active', l==='nl');
+  applyLang();
+  updateAll();
+}
 
-// ── LEAFLET ──
-let map, markers = {};
-
-function initMap(lat, lon) {
-  if (S.mapReady) return;
-  S.mapReady = true;
-
-  map = L.map('map', {
-    center: [lat, lon], zoom: S.zoom,
-    zoomControl: false, attributionControl: true,
-    dragging: false, scrollWheelZoom: false,
-    doubleClickZoom: false, touchZoom: false,
-    boxZoom: false, keyboard: false
+function applyLang() {
+  const L = T[LANG];
+  // data-it / data-nl elementen
+  document.querySelectorAll('.t[data-'+LANG+']').forEach(el => {
+    el.textContent = el.getAttribute('data-'+LANG);
   });
+  // placeholders
+  document.querySelectorAll('.wp-input[data-ph-'+LANG+']').forEach(el => {
+    el.placeholder = el.getAttribute('data-ph-'+LANG);
+  });
+  // Compastitel
+  document.getElementById('app-title').textContent = L.compassTitle;
+  // Kaart toggle
+  document.getElementById('map-toggle').textContent = S.mapVisible ? L.mapOn : L.mapOff;
+  // Cardinals N S E O → taal-onafhankelijk op kompas (N S E O universeel)
+}
 
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '© OpenStreetMap',
-    maxZoom: 19, minZoom: 10
-  }).addTo(map);
+// ═══════════════════════════════
+// SCHERM WISSELEN
+// ═══════════════════════════════
+function showScreen(name) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('screen-'+name).classList.add('active');
+  window.scrollTo(0,0);
+}
 
-  // Leaflet resize fix voor circulair viewport
-  setTimeout(() => map.invalidateSize(), 300);
+// ═══════════════════════════════
+// STATE
+// ═══════════════════════════════
+const S = {
+  lat:null, lon:null, heading:null, accuracy:null,
+  mapVisible:true, zoom:16, mapReady:false,
+  waypoints:{
+    home:{lat:null,lon:null,name:''},
+    vac: {lat:null,lon:null,name:''},
+    dest:{lat:null,lon:null,name:''},
+    pers:{lat:null,lon:null,name:''}
+  },
+  activeTarget:'dest'
+};
 
+const WP_COLOR={home:'#ffd700',vac:'#2ecc71',dest:'#cc2222',pers:'#ff8c00'};
+
+// ═══════════════════════════════
+// LEAFLET
+// ═══════════════════════════════
+let map, markers={};
+
+function initMap(lat,lon) {
+  if (S.mapReady) return; S.mapReady=true;
+  map=L.map('map',{center:[lat,lon],zoom:S.zoom,
+    zoomControl:false,attributionControl:true,
+    dragging:false,scrollWheelZoom:false,
+    doubleClickZoom:false,touchZoom:false,boxZoom:false,keyboard:false});
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    {attribution:'© OSM',maxZoom:19,minZoom:10}).addTo(map);
+  setTimeout(()=>map.invalidateSize(),300);
   for (const k of ['home','vac','dest','pers']) refreshMarker(k);
 }
 
 function refreshMarker(k) {
   if (!map) return;
-  const w = S.waypoints[k];
-  if (!w.lat) { if (markers[k]) { map.removeLayer(markers[k]); delete markers[k]; } return; }
-
-  const icon = L.divIcon({
-    className:'', iconSize:[14,14], iconAnchor:[7,7],
-    html:`<div style="width:14px;height:14px;border-radius:50%;
-      background:${WP_COLOR[k]};border:2.5px solid #fff;
-      box-shadow:0 0 7px ${WP_COLOR[k]};"></div>`
-  });
-
+  const w=S.waypoints[k];
+  if (!w.lat) { if(markers[k]){map.removeLayer(markers[k]);delete markers[k];} return; }
+  const icon=L.divIcon({className:'',iconSize:[14,14],iconAnchor:[7,7],
+    html:`<div style="width:14px;height:14px;border-radius:50%;background:${WP_COLOR[k]};border:2.5px solid #fff;box-shadow:0 0 7px ${WP_COLOR[k]}"></div>`});
   if (markers[k]) markers[k].setLatLng([w.lat,w.lon]).setIcon(icon);
-  else markers[k] = L.marker([w.lat,w.lon],{icon,interactive:false})
-    .bindTooltip(w.name||WP_LABEL[k],{permanent:false,direction:'top',className:'leaflet-tooltip'})
-    .addTo(map);
+  else markers[k]=L.marker([w.lat,w.lon],{icon,interactive:false})
+    .bindTooltip(w.name||k,{permanent:false,direction:'top'}).addTo(map);
 }
 
 function doZoom(d) {
-  S.zoom = Math.min(19, Math.max(10, S.zoom + d));
-  if (map) map.setZoom(S.zoom, {animate: false});
+  S.zoom=Math.min(19,Math.max(10,S.zoom+d));
+  if (map) map.setZoom(S.zoom,{animate:false});
 }
 
 function toggleMap() {
-  S.mapVisible = !S.mapVisible;
-  document.getElementById('map-viewport').style.opacity = S.mapVisible ? '1' : '0';
-  document.getElementById('map-toggle').textContent = S.mapVisible ? '🗺 KAART' : '🗺 UIT';
+  S.mapVisible=!S.mapVisible;
+  document.getElementById('map-viewport').style.opacity=S.mapVisible?'1':'0';
+  document.getElementById('map-toggle').textContent=S.mapVisible?T[LANG].mapOn:T[LANG].mapOff;
 }
 
-// Smooth kaartrotatie via requestAnimationFrame
-let _targetRot = 0, _currentRot = 0, _rafId = null;
-function rotateMap(heading) {
-  _targetRot = -heading;
-  if (!_rafId) _rafId = requestAnimationFrame(animateMap);
+// Smooth kaart rotatie
+let _tRot=0,_cRot=0,_raf=null;
+function rotateMap(h) {
+  _tRot=-h;
+  if (!_raf) _raf=requestAnimationFrame(_animMap);
 }
-function animateMap() {
-  _rafId = null;
-  let diff = _targetRot - _currentRot;
-  // Kortste pad
-  while (diff >  180) diff -= 360;
-  while (diff < -180) diff += 360;
-  _currentRot += diff * 0.12;
-  document.getElementById('map').style.transform = `rotate(${_currentRot}deg)`;
-  if (Math.abs(diff) > 0.05) _rafId = requestAnimationFrame(animateMap);
+function _animMap() {
+  _raf=null;
+  let d=_tRot-_cRot;
+  while(d>180)d-=360; while(d<-180)d+=360;
+  _cRot+=d*0.12;
+  document.getElementById('map').style.transform=`rotate(${_cRot}deg)`;
+  if (Math.abs(d)>0.05) _raf=requestAnimationFrame(_animMap);
 }
 
-// ── GRADEN RING ──
-(function drawRing() {
-  const svg = document.getElementById('ring-svg');
-  const cx=200, cy=200, r=190;
-  let h = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="#1e160a" stroke="#4a3605" stroke-width="3"/>`;
-
-  for (let deg=0; deg<360; deg++) {
+// ═══════════════════════════════
+// GRADEN RING
+// ═══════════════════════════════
+(function drawRing(){
+  const svg=document.getElementById('ring-svg'),cx=200,cy=200,r=190;
+  let h=`<circle cx="${cx}" cy="${cy}" r="${r}" fill="#1e160a" stroke="#4a3605" stroke-width="3"/>`;
+  for(let deg=0;deg<360;deg++){
     const rad=(deg-90)*Math.PI/180;
-    const maj=deg%10===0, mid=deg%5===0&&!maj;
+    const maj=deg%10===0,mid=deg%5===0&&!maj;
     const len=maj?18:mid?10:5;
     const col=deg%90===0?'#c9972a':maj?'#9a7030':'#5a4020';
-    const x1=cx+(r-4)*Math.cos(rad), y1=cy+(r-4)*Math.sin(rad);
-    const x2=cx+(r-4-len)*Math.cos(rad), y2=cy+(r-4-len)*Math.sin(rad);
+    const x1=cx+(r-4)*Math.cos(rad),y1=cy+(r-4)*Math.sin(rad);
+    const x2=cx+(r-4-len)*Math.cos(rad),y2=cy+(r-4-len)*Math.sin(rad);
     h+=`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${col}" stroke-width="${maj?1.5:.8}"/>`;
-    if (maj && deg%30===0 && deg%90!==0) {
-      const tx=cx+(r-30)*Math.cos(rad), ty=cy+(r-30)*Math.sin(rad);
+    if(maj&&deg%30===0&&deg%90!==0){
+      const tx=cx+(r-30)*Math.cos(rad),ty=cy+(r-30)*Math.sin(rad);
       h+=`<text x="${tx}" y="${ty}" text-anchor="middle" dominant-baseline="middle"
         font-family="Cinzel,serif" font-size="11" fill="#9a7030"
         transform="rotate(${deg},${tx},${ty})">${deg}</text>`;
@@ -530,173 +830,250 @@ function animateMap() {
   svg.innerHTML=h;
 })();
 
-// ── GEOCODING ──
-async function geocodeWaypoint(k) {
-  const input = document.getElementById('inp-'+k).value.trim();
-  if (!input) { showMsg('Voer een adres in.'); return; }
-  showMsg('Zoeken…');
-  try {
+// ═══════════════════════════════
+// GEOCODING
+// ═══════════════════════════════
+async function geocodeWaypoint(k){
+  const input=document.getElementById('inp-'+k).value.trim();
+  if(!input){showMsg(T[LANG].enterAddr);return;}
+  showMsg(T[LANG].search);
+  try{
     const url=`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(input)}&format=json&limit=1`;
-    const data=await (await fetch(url,{headers:{'Accept-Language':'nl'}})).json();
-    if (!data.length) { showMsg('Adres niet gevonden. Probeer specifieker.'); return; }
+    const data=await(await fetch(url,{headers:{'Accept-Language':LANG==='it'?'it':'nl'}})).json();
+    if(!data.length){showMsg(T[LANG].noAddr);return;}
     S.waypoints[k]={lat:parseFloat(data[0].lat),lon:parseFloat(data[0].lon),
       name:data[0].display_name.split(',').slice(0,2).join(',')};
     document.getElementById('inp-'+k).value=S.waypoints[k].name;
-    refreshMarker(k); showMsg('✓ Gevonden'); setTimeout(()=>showMsg(''),1500); updateAll();
-  } catch(e) {
+    refreshMarker(k);showMsg(T[LANG].found);setTimeout(()=>showMsg(''),1500);updateAll();
+  }catch(e){
     const pts=input.split(',').map(s=>parseFloat(s.trim()));
-    if (pts.length===2&&!isNaN(pts[0])&&!isNaN(pts[1])) {
+    if(pts.length===2&&!isNaN(pts[0])&&!isNaN(pts[1])){
       S.waypoints[k]={lat:pts[0],lon:pts[1],name:input};
-      refreshMarker(k); showMsg('Coördinaten ingesteld.'); updateAll();
-    } else showMsg('Geen internet. Typ: lat,lon  (bijv. 52.37,4.89)');
+      refreshMarker(k);showMsg(T[LANG].coordOk);updateAll();
+    }else showMsg(T[LANG].noNet);
   }
 }
 
-for (const k of ['home','vac','dest','pers'])
-  document.getElementById('inp-'+k).addEventListener('keydown', e=>{ if(e.key==='Enter') geocodeWaypoint(k); });
+for(const k of ['home','vac','dest','pers'])
+  document.getElementById('inp-'+k).addEventListener('keydown',e=>{if(e.key==='Enter')geocodeWaypoint(k);});
 
-function useCurrentLocation(k) {
-  if (!S.lat) { showMsg('GPS nog niet actief. Druk eerst op Kompas Activeren.'); return; }
-  S.waypoints[k]={lat:S.lat,lon:S.lon,name:'Huidige positie'};
-  document.getElementById('inp-'+k).value='Huidige positie';
-  refreshMarker(k); showMsg('Positie ingesteld.'); updateAll();
+function useCurrentLocation(k){
+  if(!S.lat){showMsg(T[LANG].noGps);return;}
+  S.waypoints[k]={lat:S.lat,lon:S.lon,name:'📍'};
+  document.getElementById('inp-'+k).value='📍';
+  refreshMarker(k);showMsg(T[LANG].posSet);updateAll();
 }
 
-// ── ACTIVE TARGET ──
-function setActiveTarget(k, save=true) {
+// ═══════════════════════════════
+// ACTIVE TARGET
+// ═══════════════════════════════
+function setActiveTarget(k,save=true){
   S.activeTarget=k;
-  for (const j of ['home','vac','dest','pers']) {
+  for(const j of ['home','vac','dest','pers']){
     document.getElementById('btn-t-'+j).classList.toggle('active',j===k);
     document.getElementById('dot-'+j).classList.toggle('active-dot',j===k);
   }
-  if (save) saveWaypoints();
+  if(save)saveWaypoints();
   updateAll();
 }
 
-// ── OPSLAAN ──
-function saveWaypoints() {
-  localStorage.setItem('kompas3',JSON.stringify({wp:S.waypoints,at:S.activeTarget}));
-  showMsg('Opgeslagen ✓'); setTimeout(()=>showMsg(''),2000);
+// ═══════════════════════════════
+// OPSLAAN / SALVA
+// ═══════════════════════════════
+function saveWaypoints(){
+  localStorage.setItem('kompas4',JSON.stringify({wp:S.waypoints,at:S.activeTarget}));
+  showMsg(T[LANG].saved);setTimeout(()=>showMsg(''),2000);
 }
-(function load() {
-  try {
-    const d=JSON.parse(localStorage.getItem('kompas3')||'{}');
-    if (d.wp) { for (const k of ['home','vac','dest','pers']) if (d.wp[k]?.lat) { S.waypoints[k]=d.wp[k]; document.getElementById('inp-'+k).value=d.wp[k].name||''; } }
-    if (d.at) setActiveTarget(d.at,false);
-  } catch(e){}
+(function load(){
+  try{
+    const d=JSON.parse(localStorage.getItem('kompas4')||'{}');
+    if(d.wp){for(const k of ['home','vac','dest','pers'])if(d.wp[k]?.lat){S.waypoints[k]=d.wp[k];document.getElementById('inp-'+k).value=d.wp[k].name||'';}}
+    if(d.at)setActiveTarget(d.at,false);
+  }catch(e){}
 })();
 
-// ── GPS ──
-function startGPS() {
-  if (!navigator.geolocation) { showMsg('GPS niet beschikbaar.'); return; }
+// ═══════════════════════════════
+// GPS
+// ═══════════════════════════════
+function startGPS(){
+  if(!navigator.geolocation){showMsg('GPS non disponibile / GPS niet beschikbaar.');return;}
   navigator.geolocation.watchPosition(pos=>{
     const first=S.lat===null;
-    S.lat=pos.coords.latitude; S.lon=pos.coords.longitude;
+    S.lat=pos.coords.latitude;S.lon=pos.coords.longitude;
     S.accuracy=Math.round(pos.coords.accuracy);
-    document.getElementById('status-gps').textContent='GPS: ✓';
+    document.getElementById('status-gps').textContent=`${T[LANG].gps}: ✓`;
     document.getElementById('status-nauwk').textContent=`±${S.accuracy}m`;
-    if (first) { initMap(S.lat,S.lon); for (const k of ['home','vac','dest','pers']) refreshMarker(k); }
-    else if (map) map.setView([S.lat,S.lon],S.zoom,{animate:false});
+    if(first){initMap(S.lat,S.lon);for(const k of ['home','vac','dest','pers'])refreshMarker(k);}
+    else if(map)map.setView([S.lat,S.lon],S.zoom,{animate:false});
     updateAll();
-  }, err=>{ document.getElementById('status-gps').textContent='GPS: ✗'; showMsg('GPS fout: '+err.message); },
-  {enableHighAccuracy:true,maximumAge:2000,timeout:20000});
+  },err=>{
+    document.getElementById('status-gps').textContent=`${T[LANG].gps}: ✗`;
+    showMsg('GPS: '+err.message);
+  },{enableHighAccuracy:true,maximumAge:2000,timeout:20000});
 }
 
-// ── KOMPAS ──
-function startCompass() {
+// ═══════════════════════════════
+// KOMPAS / ORIËNTATIE
+// ═══════════════════════════════
+function startCompass(){
   startGPS();
-  if (typeof DeviceOrientationEvent!=='undefined'&&typeof DeviceOrientationEvent.requestPermission==='function') {
+  if(typeof DeviceOrientationEvent!=='undefined'&&typeof DeviceOrientationEvent.requestPermission==='function'){
     DeviceOrientationEvent.requestPermission()
-      .then(r=>{ if(r==='granted') listenOri(); else showMsg('Kompas toegang geweigerd.'); })
-      .catch(e=>showMsg('Fout: '+e.message));
-  } else listenOri();
+      .then(r=>{if(r==='granted')listenOri();else showMsg('Bussola negata / Kompas geweigerd.');})
+      .catch(e=>showMsg('Errore: '+e.message));
+  }else listenOri();
 }
-function listenOri() {
+
+function listenOri(){
   window.addEventListener('deviceorientationabsolute',onOri,true);
   window.addEventListener('deviceorientation',onOri,true);
 }
 
 let _lh=null;
-function onOri(e) {
+function onOri(e){
   let h=null;
-  if (e.webkitCompassHeading!=null) h=e.webkitCompassHeading;
-  else if (e.absolute&&e.alpha!=null) h=(360-e.alpha)%360;
-  else if (e.alpha!=null) h=(360-e.alpha)%360;
-  if (h===null) return;
-  if (_lh!==null) { let d=h-_lh; if(d>180)d-=360; if(d<-180)d+=360; h=_lh+d*0.25; }
-  _lh=h; S.heading=h;
-  document.getElementById('status-koers').textContent=`Koers: ${Math.round(h)}°`;
+  if(e.webkitCompassHeading!=null)h=e.webkitCompassHeading;
+  else if(e.absolute&&e.alpha!=null)h=(360-e.alpha)%360;
+  else if(e.alpha!=null)h=(360-e.alpha)%360;
+  if(h===null)return;
+  if(_lh!==null){let d=h-_lh;if(d>180)d-=360;if(d<-180)d+=360;h=_lh+d*0.25;}
+  _lh=h;S.heading=h;
+  const L=T[LANG];
+  document.getElementById('status-koers').textContent=`${L.course}: ${Math.round(h)}°`;
   document.getElementById('heading-display').textContent=`${toCard(h)} — ${Math.round(h)}°`;
   rotateMap(h);
   updateAll();
 }
 
-function toCard(d) {
-  return ['N','NNO','NO','ONO','O','OZO','ZO','ZZO','Z','ZZW','ZW','WZW','W','WNW','NW','NNW'][Math.round(d/22.5)%16];
+function toCard(d){
+  return T[LANG].cardinal[Math.round(d/22.5)%16];
 }
 
-// ── BEREKENINGEN ──
-function hav(la1,lo1,la2,lo2) {
+// ═══════════════════════════════
+// BEREKENINGEN
+// ═══════════════════════════════
+function hav(la1,lo1,la2,lo2){
   const R=6371,dL=(la2-la1)*Math.PI/180,dO=(lo2-lo1)*Math.PI/180;
   const a=Math.sin(dL/2)**2+Math.cos(la1*Math.PI/180)*Math.cos(la2*Math.PI/180)*Math.sin(dO/2)**2;
   return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
 }
-function brg(la1,lo1,la2,lo2) {
+function brg(la1,lo1,la2,lo2){
   const dO=(lo2-lo1)*Math.PI/180;
   const y=Math.sin(dO)*Math.cos(la2*Math.PI/180);
   const x=Math.cos(la1*Math.PI/180)*Math.sin(la2*Math.PI/180)-Math.sin(la1*Math.PI/180)*Math.cos(la2*Math.PI/180)*Math.cos(dO);
   return (Math.atan2(y,x)*180/Math.PI+360)%360;
 }
 
-// ── UPDATE ──
-function updateAll() {
-  if (!S.lat) return;
-  const w=S.waypoints;
+// ═══════════════════════════════
+// UPDATE
+// ═══════════════════════════════
+function updateAll(){
+  if(!S.lat)return;
+  const L=T[LANG],w=S.waypoints;
 
-  for (const k of ['home','vac','dest','pers']) {
-    if (w[k].lat!==null) {
+  for(const k of ['home','vac','dest','pers']){
+    if(w[k].lat!==null){
       const d=hav(S.lat,S.lon,w[k].lat,w[k].lon);
-      document.getElementById('dist-'+k).textContent=d<1?`${Math.round(d*1000)} m`:`${d.toFixed(2)} km`;
+      document.getElementById('dist-'+k).textContent=
+        d<1?`${Math.round(d*1000)} m`:`${d.toFixed(2)} km`;
     }
   }
 
-  for (const k of ['home','vac','dest','pers']) {
+  for(const k of ['home','vac','dest','pers']){
     const dot=document.getElementById('dot-'+k);
-    if (w[k].lat!==null) { placeDot(dot,brg(S.lat,S.lon,w[k].lat,w[k].lon)); dot.style.display='block'; }
+    if(w[k].lat!==null){placeDot(dot,brg(S.lat,S.lon,w[k].lat,w[k].lon));dot.style.display='block';}
     else dot.style.display='none';
   }
 
   const a=w[S.activeTarget];
-  if (a.lat!==null) {
+  if(a.lat!==null){
     const b=brg(S.lat,S.lon,a.lat,a.lon);
-    if (S.heading!==null)
+    if(S.heading!==null)
       document.getElementById('needle-svg').style.transform=`rotate(${b-S.heading}deg)`;
     const d=hav(S.lat,S.lon,a.lat,a.lon);
     document.getElementById('dist-main').textContent=d<1?`${Math.round(d*1000)} m`:`${d.toFixed(2)} km`;
-    document.getElementById('dist-label').textContent=WP_LABEL[S.activeTarget]+' (hemelsbreed)';
+    document.getElementById('dist-label').textContent=L.toLbl[S.activeTarget]+' (in linea d\'aria / hemelsbreed)';
   }
 }
 
-function placeDot(el,bearingDeg) {
-  const c=document.getElementById('compass'), sz=c.offsetWidth, ctr=sz/2, r=sz*0.415;
+function placeDot(el,bearingDeg){
+  const c=document.getElementById('compass'),sz=c.offsetWidth,ctr=sz/2,r=sz*0.415;
   const rad=(bearingDeg-90)*Math.PI/180;
   el.style.left=(ctr+r*Math.cos(rad))+'px';
   el.style.top =(ctr+r*Math.sin(rad))+'px';
 }
 
-function showMsg(m) { document.getElementById('error-msg').textContent=m; }
+// ═══════════════════════════════
+// TTS — SPRAAK
+// ═══════════════════════════════
+let ttsVoices=[];
+window.speechSynthesis.onvoiceschanged=()=>{ ttsVoices=window.speechSynthesis.getVoices(); };
 
-// ── DEMO (?demo in URL) ──
-if (location.search.includes('demo')) {
-  S.lat=52.3676; S.lon=4.9041;
+function getBestVoice(lang){
+  const code=lang==='it'?'it':'nl';
+  return ttsVoices.find(v=>v.lang.startsWith(code)&&v.localService)
+      || ttsVoices.find(v=>v.lang.startsWith(code))
+      || null;
+}
+
+function speak(){
+  if(!S.lat||S.heading===null){
+    alert(T[LANG].ttsNone); return;
+  }
+  const L=T[LANG];
+  const a=S.waypoints[S.activeTarget];
+  if(!a.lat){alert(T[LANG].ttsNone);return;}
+
+  const b   = brg(S.lat,S.lon,a.lat,a.lon);
+  const card= toCard(b);
+  const deg = Math.round(b);
+  const dist= hav(S.lat,S.lon,a.lat,a.lon);
+  const [s1,s2,s3,s4]=L.distUnit;
+  let distTxt, unit;
+  if(dist<1){distTxt=String(Math.round(dist*1000)); unit=Math.round(dist*1000)===1?s1:s2;}
+  else{distTxt=dist.toFixed(1).replace('.',','); unit=dist<2?s3:s4;}
+
+  const txt=L.ttsText(card,deg,distTxt,unit);
+
+  window.speechSynthesis.cancel();
+  const utt=new SpeechSynthesisUtterance(txt);
+  utt.lang=LANG==='it'?'it-IT':'nl-NL';
+  const v=getBestVoice(LANG);
+  if(v) utt.voice=v;
+  utt.rate=0.92; utt.pitch=1.0; utt.volume=1.0;
+
+  const ind=document.getElementById('tts-ind');
+  ind.style.display='inline-block';
+  utt.onend=()=>{ ind.style.display='none'; };
+  utt.onerror=()=>{ ind.style.display='none'; };
+
+  window.speechSynthesis.speak(utt);
+}
+
+// ═══════════════════════════════
+// MSG
+// ═══════════════════════════════
+function showMsg(m){ document.getElementById('error-msg').textContent=m; }
+
+// ═══════════════════════════════
+// INIT TAAL
+// ═══════════════════════════════
+applyLang();
+setActiveTarget(S.activeTarget, false);
+
+// ═══════════════════════════════
+// DEMO (?demo)
+// ═══════════════════════════════
+if(location.search.includes('demo')){
+  S.lat=52.3676;S.lon=4.9041;
   initMap(52.3676,4.9041);
-  document.getElementById('status-gps').textContent='GPS: ✓ demo';
+  document.getElementById('status-gps').textContent=`${T[LANG].gps}: ✓ demo`;
   let dh=0;
   setInterval(()=>{
-    dh=(dh+0.6)%360; S.heading=dh;
-    document.getElementById('status-koers').textContent=`Koers: ${Math.round(dh)}°`;
+    dh=(dh+0.6)%360;S.heading=dh;
+    document.getElementById('status-koers').textContent=`${T[LANG].course}: ${Math.round(dh)}°`;
     document.getElementById('heading-display').textContent=`${toCard(dh)} — ${Math.round(dh)}°`;
-    rotateMap(dh); updateAll();
+    rotateMap(dh);updateAll();
   },50);
 }
 </script>
