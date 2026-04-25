@@ -135,16 +135,26 @@
     50%      { box-shadow: 0 0 20px rgba(30,130,255,1), 0 0 0 9px rgba(30,130,255,.07); }
   }
 
-  /* Zoom */
-  .zoom-bar {
-    position: absolute; left: 18%; top: 50%; transform: translateY(-50%);
-    z-index: 30; display: flex; flex-direction: column; gap: 4px;
-  }
-  .zoom-btn {
-    width: 28px; height: 28px; background: rgba(20,12,4,.9);
+  /* (zoom-bar verwijderd) */
+  /* Cache download knop */
+  .cache-btn {
+    position: absolute; bottom: 18%; left: 18%;
+    z-index: 30; background: rgba(20,12,4,.9);
     border: 1px solid var(--brass-dark); color: var(--brass);
-    font-size: 1.05rem; display: flex; align-items: center; justify-content: center;
-    cursor: pointer; border-radius: 2px; font-family: 'Cinzel',serif; user-select: none;
+    font-size: .58rem; font-family: 'Cinzel',serif; letter-spacing: .05em;
+    padding: 4px 7px; border-radius: 2px; cursor: pointer;
+  }
+
+  /* Cache voortgangsbalk */
+  .cache-progress {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    height: 4px; background: rgba(0,0,0,.5); z-index: 40; border-radius: 0 0 50% 50%;
+    overflow: hidden; display: none;
+  }
+  .cache-progress-bar {
+    height: 100%; width: 0%;
+    background: linear-gradient(90deg, #2ecc71, #27ae60);
+    transition: width .2s;
   }
 
   /* Kaart-toggle */
@@ -407,16 +417,16 @@
     <div class="map-viewport" id="map-viewport">
       <div id="map"></div>
       <div class="map-overlay"></div>
+      <div class="cache-progress" id="cache-progress">
+        <div class="cache-progress-bar" id="cache-progress-bar"></div>
+      </div>
     </div>
 
     <!-- BLAUW — jij / tu -->
     <div class="you-dot" id="you-dot"></div>
 
-    <div class="zoom-bar">
-      <div class="zoom-btn" onclick="doZoom(1)">+</div>
-      <div class="zoom-btn" onclick="doZoom(-1)">−</div>
-    </div>
     <div class="map-toggle" id="map-toggle" onclick="toggleMap()">🗺</div>
+    <div class="cache-btn" id="cache-btn" onclick="startCacheTiles()" title="Download kaart voor offline gebruik">⬇️</div>
 
     <div id="needle-layer">
       <svg id="needle-svg" viewBox="0 0 200 200">
@@ -603,10 +613,10 @@
     <h3>🗺 <span class="it">La mappa</span> <span class="nl">/ De kaart</span></h3>
     <p class="it">La mappa OpenStreetMap ruota con te — "davanti a te" è sempre in alto (heading-up). Puoi vedere fiumi, ponti, sentieri e strade in anticipo.</p>
     <p class="nl">De OpenStreetMap kaart draait met je mee — "voor je uit" staat altijd bovenaan. Je ziet rivieren, bruggen, paden en wegen van tevoren.</p>
-    <p class="it" style="margin-top:5px"><strong>+</strong> / <strong>−</strong> voor zoomen. <strong>🗺</strong> om de kaart te verbergen/tonen.</p>
-    <p class="nl" style="margin-top:2px"><strong>+</strong> / <strong>−</strong> voor in-/uitzoomen. <strong>🗺</strong> om kaart aan/uit te zetten.</p>
-    <p class="it" style="margin-top:5px">💡 <em>Consiglio offline:</em> naviga la zona a casa con WiFi — le tessere vengono salvate nella cache del browser. In campagna funziona senza internet!</p>
-    <p class="nl" style="margin-top:2px">💡 <em>Offline tip:</em> blader thuis de wandelzone door met wifi — tegels worden gecached. Buiten werkt het zonder internet!</p>
+    <p class="it" style="margin-top:5px"><strong>🗺</strong> per mostrare/nascondere la mappa. <strong>⬇️</strong> per scaricare le tessere offline.</p>
+    <p class="nl" style="margin-top:2px"><strong>🗺</strong> kaart aan/uit. <strong>⬇️</strong> downloadt de kaart voor offline gebruik.</p>
+    <p class="it" style="margin-top:5px">💡 <em>Consiglio offline:</em> premi <strong>⬇️</strong> a casa con WiFi — scarica ~400 tessere (zoom 13–17, raggio 8 km). In campagna la mappa funziona senza internet!</p>
+    <p class="nl" style="margin-top:2px">💡 <em>Offline tip:</em> druk thuis op <strong>⬇️</strong> met wifi — downloadt ~400 tegels (zoom 13–17, straal 8 km). Buiten werkt de kaart zonder internet!</p>
   </div>
 
   <!-- Spraak -->
@@ -755,16 +765,24 @@ const WP_COLOR={home:'#ffd700',vac:'#2ecc71',dest:'#cc2222',pers:'#ff8c00'};
 // LEAFLET
 // ═══════════════════════════════
 let map, markers={};
+const MAP_ZOOM = 16; // vaste zoom, geen knoppen meer
 
 function initMap(lat,lon) {
   if (S.mapReady) return; S.mapReady=true;
-  map=L.map('map',{center:[lat,lon],zoom:S.zoom,
+
+  map=L.map('map',{center:[lat,lon],zoom:MAP_ZOOM,
     zoomControl:false,attributionControl:true,
     dragging:false,scrollWheelZoom:false,
     doubleClickZoom:false,touchZoom:false,boxZoom:false,keyboard:false});
+
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-    {attribution:'© OSM',maxZoom:19,minZoom:10}).addTo(map);
-  setTimeout(()=>map.invalidateSize(),300);
+    {attribution:'© OSM',maxZoom:19,minZoom:10,
+     // Langere cache-tijd in browser
+     keepBuffer:4}).addTo(map);
+
+  // InvalidateSize meerdere keren — Leaflet in ronde clip heeft dit nodig
+  [100,300,600,1200].forEach(t => setTimeout(()=>map.invalidateSize({reset:false}),t));
+
   for (const k of ['home','vac','dest','pers']) refreshMarker(k);
 }
 
@@ -779,15 +797,116 @@ function refreshMarker(k) {
     .bindTooltip(w.name||k,{permanent:false,direction:'top'}).addTo(map);
 }
 
-function doZoom(d) {
-  S.zoom=Math.min(19,Math.max(10,S.zoom+d));
-  if (map) map.setZoom(S.zoom,{animate:false});
-}
-
 function toggleMap() {
   S.mapVisible=!S.mapVisible;
   document.getElementById('map-viewport').style.opacity=S.mapVisible?'1':'0';
   document.getElementById('map-toggle').textContent=S.mapVisible?T[LANG].mapOn:T[LANG].mapOff;
+}
+
+// ═══════════════════════════════
+// OFFLINE TILE PRELOADER
+// Haalt alle tiles op voor het huidige gebied
+// op zoom 13 t/m 17 en slaat ze op in Cache API
+// ═══════════════════════════════
+
+// Tile-coordinaat berekening
+function lat2tile(lat,zoom){ return Math.floor((1-Math.log(Math.tan(lat*Math.PI/180)+1/Math.cos(lat*Math.PI/180))/Math.PI)/2*Math.pow(2,zoom)); }
+function lon2tile(lon,zoom){ return Math.floor((lon+180)/360*Math.pow(2,zoom)); }
+
+// Bereken aantal tiles voor gebied
+function countTiles(lat,lon,radiusKm,minZ,maxZ){
+  let total=0;
+  const deg=radiusKm/111;
+  for(let z=minZ;z<=maxZ;z++){
+    const x0=lon2tile(lon-deg,z),x1=lon2tile(lon+deg,z);
+    const y0=lat2tile(lat+deg,z),y1=lat2tile(lat-deg,z);
+    total+=(Math.abs(x1-x0)+1)*(Math.abs(y1-y0)+1);
+  }
+  return total;
+}
+
+async function startCacheTiles(){
+  if(!S.lat){ showMsg(T[LANG].noGps); return; }
+  if(!('caches' in window)){ showMsg('Cache API niet beschikbaar in deze browser.'); return; }
+
+  const total=countTiles(S.lat,S.lon,8,13,17);
+  const confirmMsg = LANG==='it'
+    ? `Scaricare ~${total} tessere mappa (circa ${Math.round(total*8/1024)} MB) per uso offline?\n\nZoom 13–17, raggio 8 km attorno alla posizione attuale.`
+    : `~${total} kaart-tegels downloaden (ca. ${Math.round(total*8/1024)} MB) voor offline gebruik?\n\nZoom 13–17, straal 8 km rondom huidige positie.`;
+
+  if(!confirm(confirmMsg)) return;
+
+  const progressEl=document.getElementById('cache-progress');
+  const barEl=document.getElementById('cache-progress-bar');
+  const btn=document.getElementById('cache-btn');
+  progressEl.style.display='block';
+  btn.textContent='⏳';
+
+  const cache=await caches.open('kompas-tiles-v1');
+  const subdomain=['a','b','c'];
+  let done=0,failed=0;
+  const deg=8/111;
+  const minZ=13,maxZ=17;
+
+  for(let z=minZ;z<=maxZ;z++){
+    const x0=lon2tile(S.lon-deg,z),x1=lon2tile(S.lon+deg,z);
+    const y0=lat2tile(S.lat+deg,z),y1=lat2tile(S.lat-deg,z);
+    for(let x=Math.min(x0,x1);x<=Math.max(x0,x1);x++){
+      for(let y=Math.min(y0,y1);y<=Math.max(y0,y1);y++){
+        const s=subdomain[(x+y)%3];
+        const url=`https://${s}.tile.openstreetmap.org/${z}/${x}/${y}.png`;
+        try{
+          const existing=await cache.match(url);
+          if(!existing){
+            const resp=await fetch(url,{mode:'cors'});
+            if(resp.ok) await cache.put(url,resp);
+          }
+        }catch(e){ failed++; }
+        done++;
+        barEl.style.width=`${Math.round(done/total*100)}%`;
+        // Kleine pauze elke 20 tiles om UI niet te blokkeren
+        if(done%20===0) await new Promise(r=>setTimeout(r,5));
+      }
+    }
+  }
+
+  progressEl.style.display='none';
+  btn.textContent='✅';
+  setTimeout(()=>btn.textContent='⬇️',3000);
+  const msg=LANG==='it'
+    ? `Mappa salvata! ${done-failed} tessere in cache. ${failed>0?`(${failed} errori)`:'Tutto ok!'}`
+    : `Kaart opgeslagen! ${done-failed} tegels gecached. ${failed>0?`(${failed} fouten)`:'Alles ok!'}`;
+  showMsg(msg);
+  setTimeout(()=>showMsg(''),5000);
+}
+
+// Service Worker registreren voor achtergrond cache-interceptie
+if('serviceWorker' in navigator){
+  // Inline SW als blob — werkt zonder apart bestand
+  const swCode=`
+const CACHE='kompas-tiles-v1';
+self.addEventListener('fetch',e=>{
+  if(e.request.url.includes('tile.openstreetmap.org')){
+    e.respondWith(
+      caches.open(CACHE).then(async cache=>{
+        const cached=await cache.match(e.request);
+        if(cached) return cached;
+        try{
+          const fresh=await fetch(e.request);
+          if(fresh.ok) cache.put(e.request,fresh.clone());
+          return fresh;
+        }catch{
+          return cached||new Response('',{status:503});
+        }
+      })
+    );
+  }
+});`;
+  const blob=new Blob([swCode],{type:'application/javascript'});
+  const swUrl=URL.createObjectURL(blob);
+  navigator.serviceWorker.register(swUrl,{scope:'/'}).catch(()=>{
+    // SW mislukt soms vanwege scope — stille fallback
+  });
 }
 
 // Smooth kaart rotatie
@@ -904,7 +1023,7 @@ function startGPS(){
     document.getElementById('status-gps').textContent=`${T[LANG].gps}: ✓`;
     document.getElementById('status-nauwk').textContent=`±${S.accuracy}m`;
     if(first){initMap(S.lat,S.lon);for(const k of ['home','vac','dest','pers'])refreshMarker(k);}
-    else if(map)map.setView([S.lat,S.lon],S.zoom,{animate:false});
+    else if(map)map.setView([S.lat,S.lon],MAP_ZOOM,{animate:false});
     updateAll();
   },err=>{
     document.getElementById('status-gps').textContent=`${T[LANG].gps}: ✗`;
