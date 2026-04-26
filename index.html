@@ -417,6 +417,135 @@
     <div class="map-viewport" id="map-viewport">
       <div id="map"></div>
       <div class="map-overlay"></div>
+      <!-- Windroosoverlay — klassieke stijl, staat stil, draait nooit mee -->
+      <svg id="windrose-svg" viewBox="0 0 300 300"
+        style="position:absolute;inset:0;width:100%;height:100%;z-index:7;pointer-events:none">
+        <defs>
+          <filter id="wr-glow" x="-40%" y="-40%" width="180%" height="180%">
+            <feGaussianBlur stdDeviation="1.2" result="b"/>
+            <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+          <!-- Sepia tint voor vintage look -->
+          <filter id="wr-sepia">
+            <feColorMatrix type="saturate" values="0.4"/>
+          </filter>
+        </defs>
+
+        <!-- ── BUITENSTE SIERRINGEN ── -->
+        <circle cx="150" cy="150" r="132" fill="none" stroke="rgba(160,110,20,0.18)" stroke-width="0.8"/>
+        <circle cx="150" cy="150" r="126" fill="none" stroke="rgba(160,110,20,0.12)" stroke-width="0.5"/>
+
+        <!-- ── 4 GROTE HOOFDPIJLEN (N Z O W) ── -->
+        <!-- Slanke gotische diamandvorm: punt → schouder → centrum -->
+        <!-- NOORD — rood accent bovenste helft -->
+        <polygon points="150,18  154,108 150,122 146,108"
+          fill="rgba(160,40,30,0.38)" filter="url(#wr-glow)"/>
+        <polygon points="150,18  152,60  150,72  148,60"
+          fill="rgba(200,60,40,0.55)" filter="url(#wr-glow)"/>
+
+        <!-- ZUID -->
+        <polygon points="150,282 154,192 150,178 146,192"
+          fill="rgba(130,95,20,0.28)"/>
+        <polygon points="150,282 152,240 150,228 148,240"
+          fill="rgba(150,110,25,0.35)"/>
+
+        <!-- OOST -->
+        <polygon points="282,150 192,154 178,150 192,146"
+          fill="rgba(130,95,20,0.28)"/>
+        <polygon points="282,150 240,152 228,150 240,148"
+          fill="rgba(150,110,25,0.35)"/>
+
+        <!-- WEST -->
+        <polygon points="18,150  108,154 122,150 108,146"
+          fill="rgba(130,95,20,0.28)"/>
+        <polygon points="18,150  60,152  72,150  60,148"
+          fill="rgba(150,110,25,0.35)"/>
+
+        <!-- ── 4 TUSSENRICHTINGEN (NW NO ZO ZW) halve lengte ── -->
+        <!-- NO -->
+        <polygon points="243,57  196,118 188,110 196,102"
+          fill="rgba(130,95,20,0.20)"/>
+        <!-- ZO -->
+        <polygon points="243,243 196,182 188,190 196,198"
+          fill="rgba(130,95,20,0.18)"/>
+        <!-- ZW -->
+        <polygon points="57,243  104,182 112,190 104,198"
+          fill="rgba(130,95,20,0.18)"/>
+        <!-- NW -->
+        <polygon points="57,57   104,118 112,110 104,102"
+          fill="rgba(130,95,20,0.20)"/>
+
+        <!-- ── 8 KLEINE TUSSEN-TUSSENRICHTINGEN ── dunne streepjes -->
+        <!-- NNO 22.5° -->
+        <line x1="150" y1="150" x2="179" y2="65"
+          stroke="rgba(140,100,20,0.15)" stroke-width="0.8"/>
+        <!-- ONO 67.5° -->
+        <line x1="150" y1="150" x2="235" y2="121"
+          stroke="rgba(140,100,20,0.15)" stroke-width="0.8"/>
+        <!-- OZO 112.5° -->
+        <line x1="150" y1="150" x2="235" y2="179"
+          stroke="rgba(140,100,20,0.15)" stroke-width="0.8"/>
+        <!-- ZZO 157.5° -->
+        <line x1="150" y1="150" x2="179" y2="235"
+          stroke="rgba(140,100,20,0.15)" stroke-width="0.8"/>
+        <!-- ZZW 202.5° -->
+        <line x1="150" y1="150" x2="121" y2="235"
+          stroke="rgba(140,100,20,0.15)" stroke-width="0.8"/>
+        <!-- WZW 247.5° -->
+        <line x1="150" y1="150" x2="65" y2="179"
+          stroke="rgba(140,100,20,0.15)" stroke-width="0.8"/>
+        <!-- WNW 292.5° -->
+        <line x1="150" y1="150" x2="65" y2="121"
+          stroke="rgba(140,100,20,0.15)" stroke-width="0.8"/>
+        <!-- NNW 337.5° -->
+        <line x1="150" y1="150" x2="121" y2="65"
+          stroke="rgba(140,100,20,0.15)" stroke-width="0.8"/>
+
+        <!-- ── LABELS HOOFDRICHTINGEN ── -->
+        <!-- N rood, prominent -->
+        <text x="150" y="16" text-anchor="middle"
+          font-family="Cinzel,serif" font-size="15" font-weight="700"
+          fill="rgba(200,55,40,0.72)" filter="url(#wr-glow)">N</text>
+        <!-- S Z O W gedempte goud -->
+        <text x="150" y="296" text-anchor="middle"
+          font-family="Cinzel,serif" font-size="12" font-weight="700"
+          fill="rgba(180,130,30,0.42)">S</text>
+        <text x="290" y="155" text-anchor="middle"
+          font-family="Cinzel,serif" font-size="12" font-weight="700"
+          fill="rgba(180,130,30,0.42)">E</text>
+        <text x="10" y="155" text-anchor="middle"
+          font-family="Cinzel,serif" font-size="12" font-weight="700"
+          fill="rgba(180,130,30,0.42)">O</text>
+
+        <!-- ── LABELS TUSSENRICHTINGEN ── klein, schuin -->
+        <text x="256" y="52" text-anchor="middle"
+          font-family="Cinzel,serif" font-size="8" font-weight="700"
+          fill="rgba(160,115,25,0.35)" transform="rotate(45,256,52)">NE</text>
+        <text x="256" y="256" text-anchor="middle"
+          font-family="Cinzel,serif" font-size="8" font-weight="700"
+          fill="rgba(160,115,25,0.30)" transform="rotate(-45,256,256)">SE</text>
+        <text x="44" y="256" text-anchor="middle"
+          font-family="Cinzel,serif" font-size="8" font-weight="700"
+          fill="rgba(160,115,25,0.30)" transform="rotate(45,44,256)">SW</text>
+        <text x="44" y="52" text-anchor="middle"
+          font-family="Cinzel,serif" font-size="8" font-weight="700"
+          fill="rgba(160,115,25,0.35)" transform="rotate(-45,44,52)">NW</text>
+
+        <!-- ── CENTRALE DECORATIEVE ROOS ── -->
+        <!-- Buitenste sierring -->
+        <circle cx="150" cy="150" r="28" fill="none"
+          stroke="rgba(150,105,20,0.22)" stroke-width="1"/>
+        <!-- Kleine diamantjes op de as -->
+        <polygon points="150,122 153,150 150,178 147,150"
+          fill="rgba(150,105,20,0.18)"/>
+        <polygon points="122,150 150,153 178,150 150,147"
+          fill="rgba(150,105,20,0.18)"/>
+        <!-- Centrum pin -->
+        <circle cx="150" cy="150" r="5"
+          fill="rgba(190,140,30,0.45)" stroke="rgba(100,70,10,0.35)" stroke-width="1"/>
+        <circle cx="150" cy="150" r="2"
+          fill="rgba(220,170,50,0.60)"/>
+      </svg>
       <div class="cache-progress" id="cache-progress">
         <div class="cache-progress-bar" id="cache-progress-bar"></div>
       </div>
@@ -749,7 +878,7 @@ function showScreen(name) {
 // ═══════════════════════════════
 const S = {
   lat:null, lon:null, heading:null, accuracy:null,
-  mapVisible:true, zoom:16, mapReady:false,
+  mapVisible:true, mapReady:false,
   waypoints:{
     home:{lat:null,lon:null,name:''},
     vac: {lat:null,lon:null,name:''},
