@@ -1,19 +1,20 @@
 <!--
 ================================================================================
   Rivelazione bussola-del-freccia — Strumento di Rilevamento della direzione 
-  Versione 3.0 — 2025
+  Versione 4.0 — 2025
 ================================================================================
   Copyright (c) 2025 Jan den Hollander 
   Tutti i diritti riservati.
   Contact: jandenhollander@duck.com 
 ================================================================================
-  V3.0 WIJZIGINGEN:
-  - Kaart: HEADING-UP (draait mee, "voor je" altijd boven) — zoals origineel
-  - Windroze: zit OP de kaart maar krijgt TEGENGESTELDE rotatie
-    → windroze-N wijst altijd naar geografisch noorden, ook als kaart draait
-  - Rode naald: draait, wijst naar bestemming relatief aan looprichting
-    needleAngle = bearingToTarget - heading
-    0° = naald omhoog = goede richting ✅
+  V4.0 — werkt als een echt fysiek kompas plat in je hand:
+
+  KAART:         VAST, north-up. Beweegt nooit.
+  WINDROZE:      Draait als echte kompasnaald: rotate(-heading)
+                 N-pijl zoekt altijd het magnetische noorden op.
+  RODE NAALD:    Wijst naar bestemming op de vaste north-up kaart.
+                 naalAngle = bearingToTarget (absoluut, geen heading-correctie)
+  STIPPEN RING:  North-up, absolute bearing.
 ================================================================================
 -->
 <!DOCTYPE html>
@@ -41,13 +42,10 @@
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
   body {
-    background: var(--bg);
-    color: var(--cream);
+    background: var(--bg); color: var(--cream);
     font-family: 'IM Fell English', Georgia, serif;
     display: flex; flex-direction: column; align-items: center;
-    min-height: 100vh;
-    padding: 10px 8px 28px;
-    overflow-x: hidden;
+    min-height: 100vh; padding: 10px 8px 28px; overflow-x: hidden;
   }
 
   .screen { display: none; width: 100%; max-width: 460px; flex-direction: column; align-items: center; }
@@ -55,8 +53,7 @@
 
   .lang-bar {
     display: flex; gap: 6px; align-items: center;
-    width: 100%; max-width: 460px;
-    margin-bottom: 6px; justify-content: flex-end;
+    width: 100%; max-width: 460px; margin-bottom: 6px; justify-content: flex-end;
   }
   .lang-btn {
     background: rgba(200,160,40,.12); border: 1px solid var(--brass-dark);
@@ -67,12 +64,10 @@
 
   .top-bar {
     display: flex; align-items: center; justify-content: space-between;
-    width: 100%; max-width: 460px;
-    margin-bottom: 6px;
+    width: 100%; max-width: 460px; margin-bottom: 6px;
   }
   .top-bar h1 {
-    font-family: 'Cinzel',serif;
-    font-size: clamp(.8rem,2.8vw,1.1rem);
+    font-family: 'Cinzel',serif; font-size: clamp(.8rem,2.8vw,1.1rem);
     letter-spacing: .16em; color: var(--brass);
     text-shadow: 0 0 18px rgba(200,150,40,.4);
   }
@@ -80,8 +75,7 @@
     background: rgba(200,160,40,.1); border: 1px solid var(--brass-dark);
     color: var(--brass); font-size: 1.1rem; width: 34px; height: 34px;
     display: flex; align-items: center; justify-content: center;
-    border-radius: 2px; cursor: pointer; flex-shrink: 0;
-    transition: background .2s;
+    border-radius: 2px; cursor: pointer; flex-shrink: 0; transition: background .2s;
   }
   .top-icon-btn:active { background: rgba(200,160,40,.3); }
 
@@ -103,7 +97,7 @@
   }
   svg#ring-svg { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 3; }
 
-  /* Kardinale punten op de buitenste ring — VAST, N altijd boven */
+  /* Kardinale punten op buitenring — VAST, N altijd boven */
   .cardinal {
     position: absolute; font-family: 'Cinzel',serif;
     font-size: clamp(8px,2vw,13px); font-weight: 700; color: var(--brass);
@@ -111,7 +105,7 @@
     text-shadow: 0 0 5px rgba(0,0,0,.9); pointer-events: none;
   }
 
-  /* Stippen op ring — heading-up via JS */
+  /* Stippen op ring — north-up via JS */
   .ring-dot {
     position: absolute; width: 14px; height: 14px; border-radius: 50%;
     border: 2px solid rgba(255,255,255,.5); transform: translate(-50%,-50%);
@@ -120,44 +114,18 @@
   }
   .ring-dot.active-dot { width: 19px; height: 19px; border-color: #fff; }
 
-  /*
-   * map-viewport: het ronde kaartvenster
-   * map-rotating: draait heading-up (kaart volgt looprichting)
-   * windrose-svg: zit IN map-rotating maar krijgt +heading rotatie terug
-   *               zodat N altijd naar geografisch noorden wijst
-   */
+  /* KAART: vast, north-up, beweegt nooit */
   .map-viewport {
     position: absolute; inset: 17%; border-radius: 50%; overflow: hidden;
     z-index: 4; background: #3a4a3a;
     box-shadow: inset 0 0 20px rgba(0,0,0,.65), 0 0 0 2px #4a3605;
     transition: opacity .3s;
   }
-  #map-rotating {
-    position: absolute; inset: 0; width: 100%; height: 100%;
-    transform-origin: 50% 50%;
-    /* rotatie via JS: rotate(-heading) */
-  }
   #map {
-    position: absolute;
-    width: 200%; height: 200%;
-    top: -50%; left: -50%;
-    transform-origin: 50% 50%;
-    z-index: 1;
+    position: absolute; width: 200%; height: 200%;
+    top: -50%; left: -50%; z-index: 1;
+    /* GEEN rotatie — north-up */
   }
-
-  /*
-   * windrose-svg: zit in map-rotating (draait mee met kaart),
-   * maar via JS krijgt het transform: rotate(+heading)
-   * Netto effect: kaart draait -heading, windroze draait +heading
-   * → windroze staat altijd geografisch correct (N = noord)
-   */
-  #windrose-svg {
-    position: absolute; inset: 0; width: 100%; height: 100%;
-    z-index: 7; pointer-events: none;
-    transform-origin: 50% 50%;
-    /* rotatie via JS: rotate(+heading) — compenseert kaartrotatie */
-  }
-
   .map-overlay {
     position: absolute; inset: 0; border-radius: 50%;
     background: rgba(120,70,10,.2); pointer-events: none; z-index: 6;
@@ -166,37 +134,48 @@
   .leaflet-control-attribution { font-size: 7px !important; opacity: .4; }
   .leaflet-control-zoom { display: none !important; }
 
+  /*
+   * WINDROZE: zweeft boven kaart, draait als echte kompasnaald.
+   * windrozeRot = -heading via JS
+   * Staat los van #map zodat kaart niet meedraait.
+   */
+  #windrose-layer {
+    position: absolute; inset: 17%; border-radius: 50%;
+    z-index: 7; pointer-events: none;
+  }
+  #windrose-svg {
+    width: 100%; height: 100%;
+    transform-origin: center center;
+    transition: transform .35s cubic-bezier(.25,.46,.45,.94);
+  }
+
   .cache-progress {
     position: absolute; bottom: 0; left: 0; right: 0;
-    height: 4px; background: rgba(0,0,0,.5); z-index: 40; border-radius: 0 0 50% 50%;
-    overflow: hidden; display: none;
+    height: 4px; background: rgba(0,0,0,.5); z-index: 40;
+    border-radius: 0 0 50% 50%; overflow: hidden; display: none;
   }
   .cache-progress-bar {
     height: 100%; width: 0%;
-    background: linear-gradient(90deg, #2ecc71, #27ae60);
-    transition: width .2s;
+    background: linear-gradient(90deg, #2ecc71, #27ae60); transition: width .2s;
   }
 
   .map-toggle {
-    position: absolute; bottom: 18%; right: 18%;
-    z-index: 30; background: rgba(20,12,4,.9);
-    border: 1px solid var(--brass-dark); color: var(--brass);
-    font-size: .58rem; font-family: 'Cinzel',serif; letter-spacing: .05em;
-    padding: 4px 7px; border-radius: 2px; cursor: pointer;
+    position: absolute; bottom: 18%; right: 18%; z-index: 30;
+    background: rgba(20,12,4,.9); border: 1px solid var(--brass-dark);
+    color: var(--brass); font-size: .58rem; font-family: 'Cinzel',serif;
+    letter-spacing: .05em; padding: 4px 7px; border-radius: 2px; cursor: pointer;
   }
   .cache-btn {
-    position: absolute; bottom: 18%; left: 18%;
-    z-index: 30; background: rgba(20,12,4,.9);
-    border: 1px solid var(--brass-dark); color: var(--brass);
-    font-size: .58rem; font-family: 'Cinzel',serif; letter-spacing: .05em;
-    padding: 4px 7px; border-radius: 2px; cursor: pointer;
+    position: absolute; bottom: 18%; left: 18%; z-index: 30;
+    background: rgba(20,12,4,.9); border: 1px solid var(--brass-dark);
+    color: var(--brass); font-size: .58rem; font-family: 'Cinzel',serif;
+    letter-spacing: .05em; padding: 4px 7px; border-radius: 2px; cursor: pointer;
   }
 
-  /* Jij — BLAUW, statisch middelpunt, buiten map-rotating */
+  /* Jij — blauw, statisch middelpunt */
   .you-dot {
     position: absolute; top: 50%; left: 50%;
-    width: 18px; height: 18px;
-    transform: translate(-50%,-50%);
+    width: 18px; height: 18px; transform: translate(-50%,-50%);
     z-index: 20; pointer-events: none;
   }
   .you-dot::after {
@@ -212,10 +191,8 @@
   }
 
   /*
-   * RODE NAALD — ENIGE die draait voor navigatie.
-   * needleAngle = bearingToTarget - currentHeading
-   *   0°  → omhoog  → goede richting ✅
-   *   90° → rechts  → rechts afslaan
+   * RODE NAVIGATIENAALD — wijst naar bestemming.
+   * Kaart is north-up → naalAngle = bearingToTarget (absoluut)
    */
   #needle-layer {
     position: absolute; inset: 17%; border-radius: 50%;
@@ -269,20 +246,17 @@
   .wp-block.vac  { border-color: var(--green-vac); }
   .wp-block.dest { border-color: var(--red-dest); }
   .wp-block.pers { border-color: var(--orange-pers); }
-
   .wp-header { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
   .wp-dot { width: 11px; height: 11px; border-radius: 50%; flex-shrink: 0; }
   .wp-block.home .wp-dot  { background: var(--gold-home);   box-shadow: 0 0 5px var(--gold-home); }
   .wp-block.vac  .wp-dot  { background: var(--green-vac);   box-shadow: 0 0 5px var(--green-vac); }
   .wp-block.dest .wp-dot  { background: var(--red-dest);    box-shadow: 0 0 5px var(--red-dest); }
   .wp-block.pers .wp-dot  { background: var(--orange-pers); box-shadow: 0 0 5px var(--orange-pers); }
-
   .wp-label { font-family: 'Cinzel',serif; font-size: .63rem; letter-spacing: .09em; flex: 1; }
   .wp-block.home .wp-label { color: var(--gold-home); }
   .wp-block.vac  .wp-label { color: var(--green-vac); }
   .wp-block.dest .wp-label { color: var(--red-dest); }
   .wp-block.pers .wp-label { color: var(--orange-pers); }
-
   .wp-row { display: flex; gap: 5px; }
   .wp-input {
     flex: 1; min-width: 0; background: rgba(0,0,0,.5);
@@ -292,7 +266,6 @@
   }
   .wp-input:focus { border-color: var(--brass); }
   .wp-input::placeholder { color: rgba(200,160,40,.3); }
-
   .wp-btn {
     background: rgba(200,160,40,.1); border: 1px solid var(--brass-dark);
     color: var(--brass); font-family: 'Cinzel',serif;
@@ -310,9 +283,9 @@
     opacity: .45; transition: all .2s;
   }
   .target-btn.active { opacity: 1; }
-  .target-btn.home-t { border-color: var(--gold-home);   color: var(--gold-home);   background: rgba(255,215,0,.07); }
-  .target-btn.vac-t  { border-color: var(--green-vac);   color: var(--green-vac);   background: rgba(46,204,113,.07); }
-  .target-btn.dest-t { border-color: var(--red-dest);    color: var(--red-dest);    background: rgba(204,34,34,.07); }
+  .target-btn.home-t { border-color: var(--gold-home); color: var(--gold-home); background: rgba(255,215,0,.07); }
+  .target-btn.vac-t  { border-color: var(--green-vac); color: var(--green-vac); background: rgba(46,204,113,.07); }
+  .target-btn.dest-t { border-color: var(--red-dest);  color: var(--red-dest);  background: rgba(204,34,34,.07); }
   .target-btn.pers-t { border-color: var(--orange-pers); color: var(--orange-pers); background: rgba(255,140,0,.07); }
   .target-btn.home-t.active { background: rgba(255,215,0,.2); }
   .target-btn.vac-t.active  { background: rgba(46,204,113,.2); }
@@ -327,7 +300,6 @@
     cursor: pointer; border-radius: 2px; transition: background .2s;
   }
   .main-btn:active { background: rgba(200,160,40,.28); }
-
   .error-msg {
     color: #e07070; font-size: .66rem; text-align: center;
     margin-top: 5px; min-height: 15px; font-style: italic;
@@ -335,19 +307,15 @@
 
   .manual-screen { padding: 0 4px 20px; }
   .manual-back {
-    display: flex; align-items: center; gap: 8px;
-    margin-bottom: 14px; cursor: pointer;
-    color: var(--brass); font-family: 'Cinzel',serif;
-    font-size: .7rem; letter-spacing: .1em;
-    border: 1px solid var(--brass-dark); border-radius: 2px;
-    padding: 7px 14px; background: rgba(200,160,40,.08);
-    align-self: flex-start; transition: background .2s;
+    display: flex; align-items: center; gap: 8px; margin-bottom: 14px; cursor: pointer;
+    color: var(--brass); font-family: 'Cinzel',serif; font-size: .7rem; letter-spacing: .1em;
+    border: 1px solid var(--brass-dark); border-radius: 2px; padding: 7px 14px;
+    background: rgba(200,160,40,.08); align-self: flex-start; transition: background .2s;
   }
   .manual-back:active { background: rgba(200,160,40,.25); }
   .manual-title {
     font-family: 'Cinzel',serif; font-size: clamp(.9rem,3vw,1.1rem);
-    letter-spacing: .15em; color: var(--brass);
-    text-align: center; margin-bottom: 16px;
+    letter-spacing: .15em; color: var(--brass); text-align: center; margin-bottom: 16px;
     text-shadow: 0 0 14px rgba(200,150,40,.4);
   }
   .manual-section {
@@ -358,20 +326,13 @@
     font-family: 'Cinzel',serif; font-size: .72rem; letter-spacing: .12em;
     color: var(--brass); margin-bottom: 8px; display: flex; align-items: center; gap: 8px;
   }
-  .manual-section p, .manual-section li {
-    font-size: .73rem; line-height: 1.6; color: var(--cream); opacity: .85;
-    margin-bottom: 4px;
+  .manual-section p {
+    font-size: .73rem; line-height: 1.6; color: var(--cream); opacity: .85; margin-bottom: 4px;
   }
-  .manual-section ul { padding-left: 14px; }
   .dot-legend { display: flex; flex-direction: column; gap: 7px; margin-top: 6px; }
   .dot-row { display: flex; align-items: center; gap: 10px; }
-  .dot-swatch {
-    width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0;
-    border: 2px solid rgba(255,255,255,.4);
-  }
-  .dot-txt { font-size: .7rem; line-height: 1.4; }
-  .dot-txt .it { display: block; }
-  .dot-txt .nl { display: block; color: rgba(200,160,40,.55); font-style: italic; font-size: .64rem; }
+  .dot-swatch { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; border: 2px solid rgba(255,255,255,.4); }
+  .dot-txt { font-size: .7rem; line-height: 1.4; color: var(--cream); opacity: .85; }
   .tts-indicator {
     display: none; width: 8px; height: 8px; border-radius: 50%;
     background: #2ecc71; margin-left: 6px; vertical-align: middle;
@@ -402,90 +363,82 @@
     <div class="compass-rim"></div>
     <div class="degree-ring"><svg id="ring-svg" viewBox="0 0 400 400"></svg></div>
 
-    <!-- Kardinale punten op de buitenste ring — VAST, N altijd boven -->
+    <!-- Kardinale punten — VAST, N altijd boven -->
     <div class="cardinal" style="top:8%;left:50%">N</div>
     <div class="cardinal" style="top:92%;left:50%">S</div>
     <div class="cardinal" style="top:50%;left:93%">E</div>
     <div class="cardinal" style="top:50%;left:7%">O</div>
 
-    <!-- Stippen op ring — heading-up via JS -->
+    <!-- Stippen op ring — north-up, absolute bearing -->
     <div class="ring-dot" id="dot-home" style="color:var(--gold-home);background:var(--gold-home)"></div>
     <div class="ring-dot" id="dot-vac"  style="color:var(--green-vac);background:var(--green-vac)"></div>
     <div class="ring-dot" id="dot-dest" style="color:var(--red-dest);background:var(--red-dest)"></div>
     <div class="ring-dot" id="dot-pers" style="color:var(--orange-pers);background:var(--orange-pers)"></div>
 
-    <!--
-      map-rotating: draait -heading (kaart heading-up, "voor je" altijd boven)
-      windrose-svg: zit erin maar draait +heading terug
-                    → netto = 0° → N-pijl wijst altijd naar geografisch noorden
-    -->
+    <!-- KAART: vast, north-up -->
     <div class="map-viewport" id="map-viewport">
-      <div id="map-rotating">
-        <div id="map"></div>
-
-        <!--
-          Windroze: transform-origin center.
-          JS stelt: windrose-svg.style.transform = rotate(+heading)
-          Kaart draait -heading, windroze compenseert met +heading → staat vast op noord.
-        -->
-        <svg id="windrose-svg" viewBox="0 0 300 300">
-          <defs>
-            <filter id="wr-glow" x="-40%" y="-40%" width="180%" height="180%">
-              <feGaussianBlur stdDeviation="1.2" result="b"/>
-              <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
-            </filter>
-          </defs>
-          <circle cx="150" cy="150" r="132" fill="none" stroke="rgba(160,110,20,0.18)" stroke-width="0.8"/>
-          <!-- NOORD — rood accent, N-pijl wijst altijd geografisch noord -->
-          <polygon points="150,18  154,108 150,122 146,108" fill="rgba(160,40,30,0.38)" filter="url(#wr-glow)"/>
-          <polygon points="150,18  152,60  150,72  148,60"  fill="rgba(200,60,40,0.55)" filter="url(#wr-glow)"/>
-          <!-- ZUID -->
-          <polygon points="150,282 154,192 150,178 146,192" fill="rgba(130,95,20,0.28)"/>
-          <polygon points="150,282 152,240 150,228 148,240" fill="rgba(150,110,25,0.35)"/>
-          <!-- OOST -->
-          <polygon points="282,150 192,154 178,150 192,146" fill="rgba(130,95,20,0.28)"/>
-          <polygon points="282,150 240,152 228,150 240,148" fill="rgba(150,110,25,0.35)"/>
-          <!-- WEST -->
-          <polygon points="18,150  108,154 122,150 108,146" fill="rgba(130,95,20,0.28)"/>
-          <polygon points="18,150  60,152  72,150  60,148"  fill="rgba(150,110,25,0.35)"/>
-          <!-- Tussenrichtingen -->
-          <polygon points="243,57  196,118 188,110 196,102" fill="rgba(130,95,20,0.20)"/>
-          <polygon points="243,243 196,182 188,190 196,198" fill="rgba(130,95,20,0.18)"/>
-          <polygon points="57,243  104,182 112,190 104,198" fill="rgba(130,95,20,0.18)"/>
-          <polygon points="57,57   104,118 112,110 104,102" fill="rgba(130,95,20,0.20)"/>
-          <!-- Labels -->
-          <text x="150" y="16" text-anchor="middle" font-family="Cinzel,serif" font-size="15" font-weight="700"
-            fill="rgba(200,55,40,0.72)" filter="url(#wr-glow)">N</text>
-          <text x="150" y="296" text-anchor="middle" font-family="Cinzel,serif" font-size="12" font-weight="700"
-            fill="rgba(180,130,30,0.42)">S</text>
-          <text x="290" y="155" text-anchor="middle" font-family="Cinzel,serif" font-size="12" font-weight="700"
-            fill="rgba(180,130,30,0.42)">E</text>
-          <text x="10" y="155" text-anchor="middle" font-family="Cinzel,serif" font-size="12" font-weight="700"
-            fill="rgba(180,130,30,0.42)">O</text>
-          <circle cx="150" cy="150" r="28" fill="none" stroke="rgba(150,105,20,0.22)" stroke-width="1"/>
-          <circle cx="150" cy="150" r="5" fill="rgba(190,140,30,0.45)" stroke="rgba(100,70,10,0.35)" stroke-width="1"/>
-          <circle cx="150" cy="150" r="2" fill="rgba(220,170,50,0.60)"/>
-        </svg>
-
-        <div class="map-overlay"></div>
-        <div class="cache-progress" id="cache-progress">
-          <div class="cache-progress-bar" id="cache-progress-bar"></div>
-        </div>
+      <div id="map"></div>
+      <div class="map-overlay"></div>
+      <div class="cache-progress" id="cache-progress">
+        <div class="cache-progress-bar" id="cache-progress-bar"></div>
       </div>
     </div>
 
-    <!-- Jij-stip BUITEN map-rotating — statisch middelpunt -->
+    <!-- Jij — blauw, statisch middelpunt -->
     <div class="you-dot" id="you-dot"></div>
 
-    <div class="map-toggle" id="map-toggle" onclick="toggleMap()">🗺</div>
-    <div class="cache-btn"  id="cache-btn"  onclick="startCacheTiles()" title="Download kaart">⬇️</div>
-
     <!--
-      RODE NAALD — wijst naar bestemming, heading-up gecorrigeerd.
-      needleAngle = bearingToTarget - heading
-        0°  → omhoog  → goede richting ✅
-        90° → rechts  → rechts afslaan
+      WINDROZE: zweeft boven kaart, draait als kompasnaald.
+      JS: windrose-svg.style.transform = rotate(-heading)
+      heading=0°N  → rotate(0°)    → N-pijl boven ✓
+      heading=90°O → rotate(-90°)  → N-pijl links ✓
+      heading=270°W→ rotate(-270°) → N-pijl rechts ✓
     -->
+    <div id="windrose-layer">
+      <svg id="windrose-svg" viewBox="0 0 300 300">
+        <defs>
+          <filter id="wr-glow" x="-40%" y="-40%" width="180%" height="180%">
+            <feGaussianBlur stdDeviation="1.2" result="b"/>
+            <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+        </defs>
+        <circle cx="150" cy="150" r="132" fill="none" stroke="rgba(160,110,20,0.18)" stroke-width="0.8"/>
+        <!-- NOORD — rode pijl zoekt magnetisch noorden -->
+        <polygon points="150,18  154,108 150,122 146,108" fill="rgba(160,40,30,0.42)" filter="url(#wr-glow)"/>
+        <polygon points="150,18  152,60  150,72  148,60"  fill="rgba(210,60,40,0.65)" filter="url(#wr-glow)"/>
+        <!-- ZUID -->
+        <polygon points="150,282 154,192 150,178 146,192" fill="rgba(130,95,20,0.28)"/>
+        <polygon points="150,282 152,240 150,228 148,240" fill="rgba(150,110,25,0.35)"/>
+        <!-- OOST -->
+        <polygon points="282,150 192,154 178,150 192,146" fill="rgba(130,95,20,0.28)"/>
+        <polygon points="282,150 240,152 228,150 240,148" fill="rgba(150,110,25,0.35)"/>
+        <!-- WEST -->
+        <polygon points="18,150  108,154 122,150 108,146" fill="rgba(130,95,20,0.28)"/>
+        <polygon points="18,150  60,152  72,150  60,148"  fill="rgba(150,110,25,0.35)"/>
+        <!-- Tussenrichtingen -->
+        <polygon points="243,57  196,118 188,110 196,102" fill="rgba(130,95,20,0.20)"/>
+        <polygon points="243,243 196,182 188,190 196,198" fill="rgba(130,95,20,0.18)"/>
+        <polygon points="57,243  104,182 112,190 104,198" fill="rgba(130,95,20,0.18)"/>
+        <polygon points="57,57   104,118 112,110 104,102" fill="rgba(130,95,20,0.20)"/>
+        <!-- Labels -->
+        <text x="150" y="16"  text-anchor="middle" font-family="Cinzel,serif" font-size="15" font-weight="700"
+          fill="rgba(210,60,40,0.90)" filter="url(#wr-glow)">N</text>
+        <text x="150" y="296" text-anchor="middle" font-family="Cinzel,serif" font-size="12" font-weight="700"
+          fill="rgba(180,130,30,0.55)">S</text>
+        <text x="290" y="155" text-anchor="middle" font-family="Cinzel,serif" font-size="12" font-weight="700"
+          fill="rgba(180,130,30,0.55)">E</text>
+        <text x="10"  y="155" text-anchor="middle" font-family="Cinzel,serif" font-size="12" font-weight="700"
+          fill="rgba(180,130,30,0.55)">O</text>
+        <circle cx="150" cy="150" r="28" fill="none" stroke="rgba(150,105,20,0.22)" stroke-width="1"/>
+        <circle cx="150" cy="150" r="5"  fill="rgba(190,140,30,0.45)" stroke="rgba(100,70,10,0.35)" stroke-width="1"/>
+        <circle cx="150" cy="150" r="2"  fill="rgba(220,170,50,0.60)"/>
+      </svg>
+    </div>
+
+    <div class="map-toggle" id="map-toggle" onclick="toggleMap()">🗺</div>
+    <div class="cache-btn"  id="cache-btn"  onclick="startCacheTiles()">⬇️</div>
+
+    <!-- RODE NAVIGATIENAALD — absolute bearing naar bestemming (north-up kaart) -->
     <div id="needle-layer">
       <svg id="needle-svg" viewBox="0 0 200 200">
         <defs>
@@ -590,52 +543,41 @@
   <div class="manual-title t" data-it="📖 MANUALE D'USO" data-nl="📖 GEBRUIKSHANDLEIDING">📖 MANUALE D'USO</div>
 
   <div class="manual-section">
-    <h3>🚀 Avvio rapido / Snel starten</h3>
-    <p>1. Inserisci gli indirizzi e tocca CERCA / Vul adressen in en tik ZOEK.</p>
-    <p>2. Tocca 💾 SALVA / Tik 💾 SLA OP.</p>
-    <p>3. Tocca ▶ ATTIVA BUSSOLA / Tik ▶ KOMPAS ACTIVEREN.</p>
+    <h3>🧭 Werking / Come funziona</h3>
+    <p>Werkt als een <strong>echt kompas plat in je hand</strong>.</p>
+    <p style="margin-top:6px">🗺 <strong>Kaart:</strong> staat altijd vast, N altijd boven (north-up).</p>
+    <p style="margin-top:4px">🔴 <strong>Windroze:</strong> de rode N-pijl draait automatisch naar het magnetische noorden — net als een echte kompasnaald. Draai je scherm totdat de N-pijl van de windroze de N op de gouden buitenring raakt: dan ben je georiënteerd.</p>
+    <p style="margin-top:4px">🎯 <strong>Rode navigatienaald:</strong> wijst op de vaste kaart naar je bestemming (de rode stip op de buitenring).</p>
+    <p style="margin-top:8px"><em>La mappa è fissa (nord in alto). La rosa dei venti ruota come un ago magnetico. La freccia rossa punta alla destinazione sulla mappa fissa.</em></p>
   </div>
 
   <div class="manual-section">
-    <h3>🧭 Come funziona / Hoe het werkt</h3>
-    <p><strong style="color:#cc2222">Freccia ROSSA / RODE naald</strong> — wijst naar het actieve doel, gecorrigeerd voor jouw looprichting.</p>
-    <p style="margin-top:5px">✅ Naald omhoog = goede richting!</p>
-    <p>↪ Naald rechts = rechts afslaan &nbsp; ↩ Naald links = links afslaan</p>
-    <p style="margin-top:7px">🗺 <strong>Kaart:</strong> draait mee met jouw looprichting ("voor je" altijd boven).</p>
-    <p>🧭 <strong>Windroze-N:</strong> wijst altijd naar het geografische noorden, ook als de kaart draait. Zo weet je altijd waar noord is.</p>
+    <h3>🚀 Snel starten / Avvio rapido</h3>
+    <p>1. Vul adressen in → ZOEK / Inserisci → CERCA</p>
+    <p>2. 💾 SLA OP / SALVA</p>
+    <p>3. ▶ KOMPAS ACTIVEREN / ATTIVA BUSSOLA</p>
   </div>
 
   <div class="manual-section">
-    <h3>🔵 Punti / Stippen</h3>
+    <h3>🔵 Stippen / Punti</h3>
     <div class="dot-legend">
-      <div class="dot-row">
-        <div class="dot-swatch" style="background:var(--blue-you);box-shadow:0 0 8px var(--blue-you)"></div>
-        <div class="dot-txt"><span class="it">🔵 Sei tu / Dat ben jij — altijd midden.</span></div>
-      </div>
-      <div class="dot-row">
-        <div class="dot-swatch" style="background:var(--gold-home)"></div>
-        <div class="dot-txt"><span class="it">🟡 Casa / Thuis</span></div>
-      </div>
-      <div class="dot-row">
-        <div class="dot-swatch" style="background:var(--green-vac)"></div>
-        <div class="dot-txt"><span class="it">🟢 Vacanza / Vakantie</span></div>
-      </div>
-      <div class="dot-row">
-        <div class="dot-swatch" style="background:var(--red-dest)"></div>
-        <div class="dot-txt"><span class="it">🔴 Destinazione — la freccia punta qui!</span></div>
-      </div>
-      <div class="dot-row">
-        <div class="dot-swatch" style="background:var(--orange-pers)"></div>
-        <div class="dot-txt"><span class="it">🟠 Persona / Persoon</span></div>
-      </div>
+      <div class="dot-row"><div class="dot-swatch" style="background:var(--blue-you);box-shadow:0 0 8px var(--blue-you)"></div>
+        <div class="dot-txt">🔵 Jij / Tu — altijd midden</div></div>
+      <div class="dot-row"><div class="dot-swatch" style="background:var(--gold-home)"></div>
+        <div class="dot-txt">🟡 Thuis / Casa</div></div>
+      <div class="dot-row"><div class="dot-swatch" style="background:var(--green-vac)"></div>
+        <div class="dot-txt">🟢 Vakantie / Vacanza</div></div>
+      <div class="dot-row"><div class="dot-swatch" style="background:var(--red-dest)"></div>
+        <div class="dot-txt">🔴 Bestemming — navigatienaald wijst hierheen</div></div>
+      <div class="dot-row"><div class="dot-swatch" style="background:var(--orange-pers)"></div>
+        <div class="dot-txt">🟠 Persoon / Persona</div></div>
     </div>
-    <p style="margin-top:8px">De stippen op de buitenring tonen de richting t.o.v. jouw looprichting.</p>
   </div>
 
   <div class="manual-section">
-    <h3>⚠️ Precisione / Nauwkeurigheid</h3>
-    <p>Voeg land of postcode toe: <em>Heeze, Nederland</em></p>
-    <p style="margin-top:5px">💡 Offline: ⬇️ thuis met wifi voor kaart tegels.</p>
+    <h3>⚠️ Adresnauwkeurigheid</h3>
+    <p>Voeg land toe: <em>Heeze, Nederland</em></p>
+    <p style="margin-top:5px">💡 Offline: ⬇️ thuis met wifi tegels downloaden.</p>
   </div>
 
   <div class="manual-back" onclick="showScreen('compass')" style="margin-top:8px;align-self:center">
@@ -698,21 +640,14 @@ function setLang(l) {
   localStorage.setItem('kompas_lang', l);
   document.getElementById('btn-lang-it').classList.toggle('active', l==='it');
   document.getElementById('btn-lang-nl').classList.toggle('active', l==='nl');
-  applyLang();
-  updateAll();
+  applyLang(); updateAll();
 }
-
 function applyLang() {
-  document.querySelectorAll('.t[data-'+LANG+']').forEach(function(el){
-    el.textContent = el.getAttribute('data-'+LANG);
-  });
-  document.querySelectorAll('.wp-input[data-ph-'+LANG+']').forEach(function(el){
-    el.placeholder = el.getAttribute('data-ph-'+LANG);
-  });
-  document.getElementById('app-title').textContent = T[LANG].compassTitle;
-  document.getElementById('map-toggle').textContent = S.mapVisible ? T[LANG].mapOn : T[LANG].mapOff;
+  document.querySelectorAll('.t[data-'+LANG+']').forEach(function(el){ el.textContent=el.getAttribute('data-'+LANG); });
+  document.querySelectorAll('.wp-input[data-ph-'+LANG+']').forEach(function(el){ el.placeholder=el.getAttribute('data-ph-'+LANG); });
+  document.getElementById('app-title').textContent=T[LANG].compassTitle;
+  document.getElementById('map-toggle').textContent=S.mapVisible?T[LANG].mapOn:T[LANG].mapOff;
 }
-
 function showScreen(name) {
   document.querySelectorAll('.screen').forEach(function(s){ s.classList.remove('active'); });
   document.getElementById('screen-'+name).classList.add('active');
@@ -725,96 +660,66 @@ function showScreen(name) {
 var S = {
   lat:null, lon:null, heading:null, accuracy:null,
   mapVisible:true, mapReady:false,
-  waypoints:{
-    home:{lat:null,lon:null,name:''},
-    vac: {lat:null,lon:null,name:''},
-    dest:{lat:null,lon:null,name:''},
-    pers:{lat:null,lon:null,name:''}
-  },
+  waypoints:{ home:{lat:null,lon:null,name:''}, vac:{lat:null,lon:null,name:''}, dest:{lat:null,lon:null,name:''}, pers:{lat:null,lon:null,name:''} },
   activeTarget:'dest'
 };
-
 var WP_COLOR = {home:'#ffd700',vac:'#2ecc71',dest:'#cc2222',pers:'#ff8c00'};
 
 // ═══════════════════════════════
-// LEAFLET
+// LEAFLET — north-up, kaart beweegt nooit
 // ═══════════════════════════════
-var map, markers = {};
-var MAP_ZOOM = 16;
+var map, markers={}, MAP_ZOOM=16;
 
 function initMap(lat,lon) {
-  if (S.mapReady) return;
-  S.mapReady = true;
-  map = L.map('map', {
-    center:[lat,lon], zoom:MAP_ZOOM,
-    zoomControl:false, attributionControl:true,
-    dragging:false, scrollWheelZoom:false,
-    doubleClickZoom:false, touchZoom:false, boxZoom:false, keyboard:false
-  });
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution:'© OSM', maxZoom:19, minZoom:10, keepBuffer:4
-  }).addTo(map);
-  [100,300,600,1200].forEach(function(t){
-    setTimeout(function(){ map.invalidateSize({reset:false}); }, t);
-  });
+  if(S.mapReady) return;
+  S.mapReady=true;
+  map=L.map('map',{center:[lat,lon],zoom:MAP_ZOOM,zoomControl:false,attributionControl:true,
+    dragging:false,scrollWheelZoom:false,doubleClickZoom:false,touchZoom:false,boxZoom:false,keyboard:false});
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OSM',maxZoom:19,minZoom:10,keepBuffer:4}).addTo(map);
+  [100,300,600,1200].forEach(function(t){ setTimeout(function(){ map.invalidateSize({reset:false}); },t); });
   ['home','vac','dest','pers'].forEach(function(k){ refreshMarker(k); });
 }
-
 function refreshMarker(k) {
-  if (!map) return;
-  var w = S.waypoints[k];
-  if (!w.lat) {
-    if (markers[k]) { map.removeLayer(markers[k]); delete markers[k]; }
-    return;
-  }
-  var icon = L.divIcon({
-    className:'', iconSize:[14,14], iconAnchor:[7,7],
-    html:'<div style="width:14px;height:14px;border-radius:50%;background:'+WP_COLOR[k]+';border:2.5px solid #fff;box-shadow:0 0 7px '+WP_COLOR[k]+'"></div>'
-  });
-  if (markers[k]) markers[k].setLatLng([w.lat,w.lon]).setIcon(icon);
-  else markers[k] = L.marker([w.lat,w.lon],{icon:icon,interactive:false})
-    .bindTooltip(w.name||k,{permanent:false,direction:'top'}).addTo(map);
+  if(!map) return;
+  var w=S.waypoints[k];
+  if(!w.lat){ if(markers[k]){ map.removeLayer(markers[k]); delete markers[k]; } return; }
+  var icon=L.divIcon({className:'',iconSize:[14,14],iconAnchor:[7,7],
+    html:'<div style="width:14px;height:14px;border-radius:50%;background:'+WP_COLOR[k]+';border:2.5px solid #fff;box-shadow:0 0 7px '+WP_COLOR[k]+'"></div>'});
+  if(markers[k]) markers[k].setLatLng([w.lat,w.lon]).setIcon(icon);
+  else markers[k]=L.marker([w.lat,w.lon],{icon:icon,interactive:false}).bindTooltip(w.name||k,{permanent:false,direction:'top'}).addTo(map);
 }
-
 function toggleMap() {
-  S.mapVisible = !S.mapVisible;
-  document.getElementById('map-viewport').style.opacity = S.mapVisible ? '1' : '0';
-  document.getElementById('map-toggle').textContent = S.mapVisible ? T[LANG].mapOn : T[LANG].mapOff;
+  S.mapVisible=!S.mapVisible;
+  document.getElementById('map-viewport').style.opacity=S.mapVisible?'1':'0';
+  document.getElementById('map-toggle').textContent=S.mapVisible?T[LANG].mapOn:T[LANG].mapOff;
 }
 
 // ═══════════════════════════════
-// KAART + WINDROZE ANIMATIE
+// WINDROZE ANIMATIE — draait als echte kompasnaald
 //
-// Kaart (map-rotating):  draait -heading  → heading-up ("voor je" boven)
-// Windroze (windrose-svg): draait +heading → compenseert kaartrotatie
-//                          → netto: windroze staat vast op geografisch noord
+// windrozeRot = -heading
+//   heading=0°  (Noord) → rotate(0°)    → N-pijl boven  ✓
+//   heading=90° (Oost)  → rotate(-90°)  → N-pijl links  ✓
+//   heading=180°(Zuid)  → rotate(-180°) → N-pijl onder  ✓
+//   heading=270°(West)  → rotate(-270°) → N-pijl rechts ✓
 //
-// Smooth via requestAnimationFrame
+// Kaart beweegt NIET.
 // ═══════════════════════════════
-var _targetRot = 0, _currentRot = 0, _rafId = null;
+var _wrTarget=0, _wrCurrent=0, _wrRaf=null;
 
-function rotateMap(headingDeg) {
-  _targetRot = -headingDeg;
-  if (!_rafId) _rafId = requestAnimationFrame(_animateMap);
+function rotateWindrose(headingDeg) {
+  _wrTarget = -headingDeg;
+  if(!_wrRaf) _wrRaf=requestAnimationFrame(_animateWindrose);
 }
-
-function _animateMap() {
-  _rafId = null;
-  var diff = _targetRot - _currentRot;
-  while (diff >  180) diff -= 360;
-  while (diff < -180) diff += 360;
-  _currentRot += diff * 0.12;
-
-  // Kaart draait heading-up
-  var mapEl = document.getElementById('map-rotating');
-  if (mapEl) mapEl.style.transform = 'rotate(' + _currentRot + 'deg)';
-
-  // Windroze compenseert: draait +heading zodat N altijd naar noorden wijst
-  // _currentRot = -heading (benaderd), dus windroze = -_currentRot = +heading
-  var wrEl = document.getElementById('windrose-svg');
-  if (wrEl) wrEl.style.transform = 'rotate(' + (-_currentRot) + 'deg)';
-
-  if (Math.abs(diff) > 0.05) _rafId = requestAnimationFrame(_animateMap);
+function _animateWindrose() {
+  _wrRaf=null;
+  var diff=_wrTarget-_wrCurrent;
+  while(diff> 180) diff-=360;
+  while(diff<-180) diff+=360;
+  _wrCurrent+=diff*0.12;
+  var el=document.getElementById('windrose-svg');
+  if(el) el.style.transform='rotate('+_wrCurrent+'deg)';
+  if(Math.abs(diff)>0.05) _wrRaf=requestAnimationFrame(_animateWindrose);
 }
 
 // ═══════════════════════════════
@@ -822,45 +727,30 @@ function _animateMap() {
 // ═══════════════════════════════
 function lat2tile(lat,zoom){ return Math.floor((1-Math.log(Math.tan(lat*Math.PI/180)+1/Math.cos(lat*Math.PI/180))/Math.PI)/2*Math.pow(2,zoom)); }
 function lon2tile(lon,zoom){ return Math.floor((lon+180)/360*Math.pow(2,zoom)); }
-
 function countTiles(lat,lon,radiusKm,minZ,maxZ){
   var total=0,deg=radiusKm/111;
   for(var z=minZ;z<=maxZ;z++){
-    var x0=lon2tile(lon-deg,z),x1=lon2tile(lon+deg,z);
-    var y0=lat2tile(lat+deg,z),y1=lat2tile(lat-deg,z);
+    var x0=lon2tile(lon-deg,z),x1=lon2tile(lon+deg,z),y0=lat2tile(lat+deg,z),y1=lat2tile(lat-deg,z);
     total+=(Math.abs(x1-x0)+1)*(Math.abs(y1-y0)+1);
   }
   return total;
 }
-
 async function startCacheTiles(){
   if(!S.lat){ showMsg(T[LANG].noGps); return; }
   if(!('caches' in window)){ showMsg('Cache API niet beschikbaar.'); return; }
   var total=countTiles(S.lat,S.lon,8,13,17);
-  var msg=LANG==='it'
-    ? 'Scaricare ~'+total+' tessere (ca. '+Math.round(total*8/1024)+' MB)?'
-    : '~'+total+' tegels downloaden (ca. '+Math.round(total*8/1024)+' MB)?';
+  var msg=LANG==='it'?'Scaricare ~'+total+' tessere (ca. '+Math.round(total*8/1024)+' MB)?':'~'+total+' tegels downloaden (ca. '+Math.round(total*8/1024)+' MB)?';
   if(!confirm(msg)) return;
-  var progressEl=document.getElementById('cache-progress');
-  var barEl=document.getElementById('cache-progress-bar');
-  var btn=document.getElementById('cache-btn');
+  var progressEl=document.getElementById('cache-progress'),barEl=document.getElementById('cache-progress-bar'),btn=document.getElementById('cache-btn');
   progressEl.style.display='block'; btn.textContent='⏳';
-  var cache=await caches.open('kompas-tiles-v1');
-  var subdomain=['a','b','c'];
-  var done=0,failed=0,deg=8/111;
+  var cache=await caches.open('kompas-tiles-v1'),subdomain=['a','b','c'],done=0,failed=0,deg=8/111;
   for(var z=13;z<=17;z++){
-    var x0=lon2tile(S.lon-deg,z),x1=lon2tile(S.lon+deg,z);
-    var y0=lat2tile(S.lat+deg,z),y1=lat2tile(S.lat-deg,z);
+    var x0=lon2tile(S.lon-deg,z),x1=lon2tile(S.lon+deg,z),y0=lat2tile(S.lat+deg,z),y1=lat2tile(S.lat-deg,z);
     for(var x=Math.min(x0,x1);x<=Math.max(x0,x1);x++){
       for(var y=Math.min(y0,y1);y<=Math.max(y0,y1);y++){
-        var s=subdomain[(x+y)%3];
-        var url='https://'+s+'.tile.openstreetmap.org/'+z+'/'+x+'/'+y+'.png';
-        try{
-          var existing=await cache.match(url);
-          if(!existing){ var resp=await fetch(url,{mode:'cors'}); if(resp.ok) await cache.put(url,resp); }
-        }catch(e){ failed++; }
-        done++;
-        barEl.style.width=Math.round(done/total*100)+'%';
+        var s=subdomain[(x+y)%3],url='https://'+s+'.tile.openstreetmap.org/'+z+'/'+x+'/'+y+'.png';
+        try{ var existing=await cache.match(url); if(!existing){ var resp=await fetch(url,{mode:'cors'}); if(resp.ok) await cache.put(url,resp); } }catch(e){ failed++; }
+        done++; barEl.style.width=Math.round(done/total*100)+'%';
         if(done%20===0) await new Promise(function(r){ setTimeout(r,5); });
       }
     }
@@ -870,7 +760,6 @@ async function startCacheTiles(){
   showMsg(LANG==='it'?'Salvato! '+(done-failed)+' tessere.':'Opgeslagen! '+(done-failed)+' tegels.');
   setTimeout(function(){ showMsg(''); },4000);
 }
-
 if('serviceWorker' in navigator){
   var swCode="const CACHE='kompas-tiles-v1';\nself.addEventListener('fetch',e=>{\n  if(e.request.url.includes('tile.openstreetmap.org')){\n    e.respondWith(caches.open(CACHE).then(async cache=>{\n      const cached=await cache.match(e.request);\n      if(cached) return cached;\n      try{ const fresh=await fetch(e.request); if(fresh.ok) cache.put(e.request,fresh.clone()); return fresh; }catch{ return cached||new Response('',{status:503}); }\n    }));\n  }\n});";
   var blob=new Blob([swCode],{type:'application/javascript'});
@@ -884,12 +773,9 @@ if('serviceWorker' in navigator){
   var svg=document.getElementById('ring-svg'),cx=200,cy=200,r=190;
   var h='<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="#1e160a" stroke="#4a3605" stroke-width="3"/>';
   for(var deg=0;deg<360;deg++){
-    var rad=(deg-90)*Math.PI/180;
-    var maj=deg%10===0,mid=deg%5===0&&!maj;
-    var len=maj?18:mid?10:5;
+    var rad=(deg-90)*Math.PI/180,maj=deg%10===0,mid=deg%5===0&&!maj,len=maj?18:mid?10:5;
     var col=deg%90===0?'#c9972a':maj?'#9a7030':'#5a4020';
-    var x1=cx+(r-4)*Math.cos(rad),y1=cy+(r-4)*Math.sin(rad);
-    var x2=cx+(r-4-len)*Math.cos(rad),y2=cy+(r-4-len)*Math.sin(rad);
+    var x1=cx+(r-4)*Math.cos(rad),y1=cy+(r-4)*Math.sin(rad),x2=cx+(r-4-len)*Math.cos(rad),y2=cy+(r-4-len)*Math.sin(rad);
     h+='<line x1="'+x1+'" y1="'+y1+'" x2="'+x2+'" y2="'+y2+'" stroke="'+col+'" stroke-width="'+(maj?1.5:.8)+'"/>';
     if(maj&&deg%30===0&&deg%90!==0){
       var tx=cx+(r-30)*Math.cos(rad),ty=cy+(r-30)*Math.sin(rad);
@@ -909,49 +795,34 @@ async function geocodeWaypoint(k){
   showMsg(T[LANG].search);
   try{
     var url='https://nominatim.openstreetmap.org/search?q='+encodeURIComponent(input)+'&format=json&limit=3&addressdetails=1';
-    var resp=await fetch(url,{headers:{'Accept-Language':LANG==='it'?'it':'nl','User-Agent':'BussolaTerreno/3.0'}});
+    var resp=await fetch(url,{headers:{'Accept-Language':LANG==='it'?'it':'nl','User-Agent':'BussolaTerreno/4.0'}});
     var data=await resp.json();
     if(!data.length){ showMsg(T[LANG].noAddr); return; }
-    var r=data[0];
-    var lat=parseFloat(r.lat),lon=parseFloat(r.lon);
+    var r=data[0],lat=parseFloat(r.lat),lon=parseFloat(r.lon);
     if(isNaN(lat)||isNaN(lon)||lat<-90||lat>90||lon<-180||lon>180){ showMsg(T[LANG].noAddr); return; }
     S.waypoints[k]={lat:lat,lon:lon,name:r.display_name.split(',').slice(0,3).join(',')};
     document.getElementById('inp-'+k).value=S.waypoints[k].name;
     showDebug('Found '+k+': '+lat.toFixed(5)+','+lon.toFixed(5));
-    refreshMarker(k);
-    showMsg(T[LANG].found);
-    setTimeout(function(){ showMsg(''); },2000);
-    updateAll();
+    refreshMarker(k); showMsg(T[LANG].found);
+    setTimeout(function(){ showMsg(''); },2000); updateAll();
   }catch(e){
     var pts=input.split(',').map(function(s){ return parseFloat(s.trim()); });
     if(pts.length===2&&!isNaN(pts[0])&&!isNaN(pts[1])){
-      S.waypoints[k]={lat:pts[0],lon:pts[1],name:input};
-      refreshMarker(k);
-      showMsg(T[LANG].coordOk);
-      updateAll();
-    } else {
-      showMsg(T[LANG].noNet);
-    }
+      S.waypoints[k]={lat:pts[0],lon:pts[1],name:input}; refreshMarker(k); showMsg(T[LANG].coordOk); updateAll();
+    } else { showMsg(T[LANG].noNet); }
   }
 }
-
 ['home','vac','dest','pers'].forEach(function(k){
-  document.getElementById('inp-'+k).addEventListener('keydown',function(e){
-    if(e.key==='Enter') geocodeWaypoint(k);
-  });
+  document.getElementById('inp-'+k).addEventListener('keydown',function(e){ if(e.key==='Enter') geocodeWaypoint(k); });
 });
-
 function useCurrentLocation(k){
   if(!S.lat){ showMsg(T[LANG].noGps); return; }
   S.waypoints[k]={lat:S.lat,lon:S.lon,name:'📍'};
-  document.getElementById('inp-'+k).value='📍';
-  refreshMarker(k);
-  showMsg(T[LANG].posSet);
-  updateAll();
+  document.getElementById('inp-'+k).value='📍'; refreshMarker(k); showMsg(T[LANG].posSet); updateAll();
 }
 
 // ═══════════════════════════════
-// ACTIVE TARGET
+// ACTIVE TARGET / OPSLAAN / LADEN
 // ═══════════════════════════════
 function setActiveTarget(k,save){
   if(save===undefined) save=true;
@@ -960,30 +831,16 @@ function setActiveTarget(k,save){
     document.getElementById('btn-t-'+j).classList.toggle('active',j===k);
     document.getElementById('dot-'+j).classList.toggle('active-dot',j===k);
   });
-  if(save) saveWaypoints();
-  updateAll();
+  if(save) saveWaypoints(); updateAll();
 }
-
-// ═══════════════════════════════
-// OPSLAAN / LADEN
-// ═══════════════════════════════
 function saveWaypoints(){
   localStorage.setItem('kompas4',JSON.stringify({wp:S.waypoints,at:S.activeTarget}));
-  showMsg(T[LANG].saved);
-  setTimeout(function(){ showMsg(''); },2000);
+  showMsg(T[LANG].saved); setTimeout(function(){ showMsg(''); },2000);
 }
-
 (function load(){
   try{
     var d=JSON.parse(localStorage.getItem('kompas4')||'{}');
-    if(d.wp){
-      ['home','vac','dest','pers'].forEach(function(k){
-        if(d.wp[k]&&d.wp[k].lat){
-          S.waypoints[k]=d.wp[k];
-          document.getElementById('inp-'+k).value=d.wp[k].name||'';
-        }
-      });
-    }
+    if(d.wp){ ['home','vac','dest','pers'].forEach(function(k){ if(d.wp[k]&&d.wp[k].lat){ S.waypoints[k]=d.wp[k]; document.getElementById('inp-'+k).value=d.wp[k].name||''; } }); }
     if(d.at) setActiveTarget(d.at,false);
   }catch(e){}
 })();
@@ -996,23 +853,14 @@ function startGPS(){
   navigator.geolocation.watchPosition(
     function(pos){
       var first=S.lat===null;
-      S.lat=pos.coords.latitude;
-      S.lon=pos.coords.longitude;
-      S.accuracy=Math.round(pos.coords.accuracy);
+      S.lat=pos.coords.latitude; S.lon=pos.coords.longitude; S.accuracy=Math.round(pos.coords.accuracy);
       document.getElementById('status-gps').textContent=T[LANG].gps+': ✓';
       document.getElementById('status-nauwk').textContent='±'+S.accuracy+'m';
-      if(first){
-        initMap(S.lat,S.lon);
-        ['home','vac','dest','pers'].forEach(function(k){ refreshMarker(k); });
-      } else if(map){
-        map.setView([S.lat,S.lon],MAP_ZOOM,{animate:false});
-      }
+      if(first){ initMap(S.lat,S.lon); ['home','vac','dest','pers'].forEach(function(k){ refreshMarker(k); }); }
+      else if(map){ map.setView([S.lat,S.lon],MAP_ZOOM,{animate:false}); }
       updateAll();
     },
-    function(err){
-      document.getElementById('status-gps').textContent=T[LANG].gps+': ✗';
-      showMsg('GPS: '+err.message);
-    },
+    function(err){ document.getElementById('status-gps').textContent=T[LANG].gps+': ✗'; showMsg('GPS: '+err.message); },
     {enableHighAccuracy:true,maximumAge:2000,timeout:20000}
   );
 }
@@ -1023,47 +871,29 @@ function startGPS(){
 function startCompass(){
   startGPS();
   if(typeof DeviceOrientationEvent!=='undefined'&&typeof DeviceOrientationEvent.requestPermission==='function'){
-    DeviceOrientationEvent.requestPermission()
-      .then(function(r){
-        if(r==='granted') listenOri();
-        else showMsg('Bussola negata / Kompas geweigerd.');
-      })
-      .catch(function(e){ showMsg('Errore: '+e.message); });
-  } else {
-    listenOri();
-  }
+    DeviceOrientationEvent.requestPermission().then(function(r){ if(r==='granted') listenOri(); else showMsg('Bussola negata / Kompas geweigerd.'); }).catch(function(e){ showMsg('Errore: '+e.message); });
+  } else { listenOri(); }
 }
-
 function listenOri(){
   window.addEventListener('deviceorientationabsolute',onOri,true);
   window.addEventListener('deviceorientation',onOri,true);
 }
-
 var _lastHeading=null;
-
 function onOri(e){
   var h=null;
   if(e.webkitCompassHeading!=null) h=e.webkitCompassHeading;
   else if(e.absolute&&e.alpha!=null) h=(360-e.alpha)%360;
   else if(e.alpha!=null) h=(360-e.alpha)%360;
   if(h===null) return;
-  if(_lastHeading!==null){
-    var d=h-_lastHeading;
-    if(d>180) d-=360;
-    if(d<-180) d+=360;
-    h=_lastHeading+d*0.25;
-  }
-  _lastHeading=h;
-  S.heading=h;
+  if(_lastHeading!==null){ var d=h-_lastHeading; if(d>180) d-=360; if(d<-180) d+=360; h=_lastHeading+d*0.25; }
+  _lastHeading=h; S.heading=h;
   document.getElementById('status-koers').textContent=T[LANG].course+': '+Math.round(h)+'°';
   document.getElementById('heading-display').textContent=toCard(h)+' — '+Math.round(h)+'°';
-  rotateMap(h);  // kaart heading-up, windroze compenseert automatisch
+  // Windroze draait als kompasnaald, kaart staat vast
+  rotateWindrose(h);
   updateAll();
 }
-
-function toCard(d){
-  return T[LANG].cardinal[Math.round(d/22.5)%16];
-}
+function toCard(d){ return T[LANG].cardinal[Math.round(d/22.5)%16]; }
 
 // ═══════════════════════════════
 // BEREKENINGEN
@@ -1073,10 +903,8 @@ function hav(la1,lo1,la2,lo2){
   var a=Math.sin(dL/2)*Math.sin(dL/2)+Math.cos(la1*Math.PI/180)*Math.cos(la2*Math.PI/180)*Math.sin(dO/2)*Math.sin(dO/2);
   return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
 }
-
 function brg(la1,lo1,la2,lo2){
-  var dO=(lo2-lo1)*Math.PI/180;
-  var y=Math.sin(dO)*Math.cos(la2*Math.PI/180);
+  var dO=(lo2-lo1)*Math.PI/180,y=Math.sin(dO)*Math.cos(la2*Math.PI/180);
   var x=Math.cos(la1*Math.PI/180)*Math.sin(la2*Math.PI/180)-Math.sin(la1*Math.PI/180)*Math.cos(la2*Math.PI/180)*Math.cos(dO);
   return(Math.atan2(y,x)*180/Math.PI+360)%360;
 }
@@ -1084,57 +912,53 @@ function brg(la1,lo1,la2,lo2){
 // ═══════════════════════════════
 // UPDATE
 //
-// Rode naald:   needleAngle = bearingToTarget - heading (heading-up)
-//   0°  → omhoog  → goede richting ✅
-//   90° → rechts  → rechts afslaan
+// KAART: north-up, vast → geen rotatie
 //
-// Stippen ring: ringAngle = bearingToWaypoint - heading (heading-up)
-//   0°  → waypoint recht voor je → stip boven op ring
+// WINDROZE: rotate(-heading) via rotateWindrose()
+//   Draait als echte kompasnaald.
+//   N-pijl zoekt altijd het magnetische noorden.
+//
+// RODE NAVIGATIENAALD:
+//   Kaart is north-up → naalAngle = bearingToTarget (absoluut)
+//   Geen heading-correctie nodig.
+//
+// STIPPEN OP RING:
+//   North-up → absolute bearing, geen heading-correctie.
 // ═══════════════════════════════
 function updateAll(){
   if(!S.lat) return;
   var L=T[LANG],w=S.waypoints;
 
+  // Afstanden
   ['home','vac','dest','pers'].forEach(function(k){
     var el=document.getElementById('dist-'+k);
-    if(w[k].lat!==null){
-      var d=hav(S.lat,S.lon,w[k].lat,w[k].lon);
-      el.textContent=d<1?Math.round(d*1000)+' m':d.toFixed(2)+' km';
-    } else {
-      el.textContent='';
-    }
+    if(w[k].lat!==null){ var d=hav(S.lat,S.lon,w[k].lat,w[k].lon); el.textContent=d<1?Math.round(d*1000)+' m':d.toFixed(2)+' km'; }
+    else el.textContent='';
   });
 
-  var headingForRing=S.heading!==null?S.heading:0;
+  // Stippen op buitenring — absolute bearing (north-up, geen heading-correctie)
   ['home','vac','dest','pers'].forEach(function(k){
     var dot=document.getElementById('dot-'+k);
-    if(w[k].lat!==null){
-      var absBrg=brg(S.lat,S.lon,w[k].lat,w[k].lon);
-      var relBrg=(absBrg-headingForRing+360)%360;
-      placeDot(dot,relBrg);
-      dot.style.display='block';
-    } else {
-      dot.style.display='none';
-    }
+    if(w[k].lat!==null){ placeDot(dot, brg(S.lat,S.lon,w[k].lat,w[k].lon)); dot.style.display='block'; }
+    else dot.style.display='none';
   });
 
+  // Rode navigatienaald — absolute bearing (north-up kaart)
   var a=w[S.activeTarget];
   if(a.lat!==null){
     var absBearing=brg(S.lat,S.lon,a.lat,a.lon);
     var d=hav(S.lat,S.lon,a.lat,a.lon);
-    var needleAngle=S.heading!==null?(absBearing-S.heading+360)%360:absBearing;
-    document.getElementById('needle-svg').style.transform='rotate('+needleAngle+'deg)';
+    // Geen heading-correctie: kaart is north-up
+    document.getElementById('needle-svg').style.transform='rotate('+absBearing+'deg)';
     document.getElementById('dist-main').textContent=d<1?Math.round(d*1000)+' m':d.toFixed(2)+' km';
     document.getElementById('dist-label').textContent=L.toLbl[S.activeTarget]+' (hemelsbreed)';
   }
 }
 
 function placeDot(el,angleDeg){
-  var c=document.getElementById('compass');
-  var sz=c.offsetWidth,ctr=sz/2,r=sz*0.415;
+  var c=document.getElementById('compass'),sz=c.offsetWidth,ctr=sz/2,r=sz*0.415;
   var rad=(angleDeg-90)*Math.PI/180;
-  el.style.left=(ctr+r*Math.cos(rad))+'px';
-  el.style.top=(ctr+r*Math.sin(rad))+'px';
+  el.style.left=(ctr+r*Math.cos(rad))+'px'; el.style.top=(ctr+r*Math.sin(rad))+'px';
 }
 
 // ═══════════════════════════════
@@ -1142,49 +966,28 @@ function placeDot(el,angleDeg){
 // ═══════════════════════════════
 var ttsVoices=[];
 window.speechSynthesis.onvoiceschanged=function(){ ttsVoices=window.speechSynthesis.getVoices(); };
-
 function getBestVoice(lang){
   var code=lang==='it'?'it':'nl';
-  return ttsVoices.find(function(v){ return v.lang.startsWith(code)&&v.localService; })
-      || ttsVoices.find(function(v){ return v.lang.startsWith(code); })
-      || null;
+  return ttsVoices.find(function(v){ return v.lang.startsWith(code)&&v.localService; })||ttsVoices.find(function(v){ return v.lang.startsWith(code); })||null;
 }
-
 function speak(){
   if(!S.lat||S.heading===null){ alert(T[LANG].ttsNone); return; }
-  var a=S.waypoints[S.activeTarget];
-  if(!a.lat){ alert(T[LANG].ttsNone); return; }
-  var L=T[LANG];
-  var b=brg(S.lat,S.lon,a.lat,a.lon);
-  var card=toCard(b),deg=Math.round(b);
-  var dist=hav(S.lat,S.lon,a.lat,a.lon);
+  var a=S.waypoints[S.activeTarget]; if(!a.lat){ alert(T[LANG].ttsNone); return; }
+  var L=T[LANG],b=brg(S.lat,S.lon,a.lat,a.lon),card=toCard(b),deg=Math.round(b),dist=hav(S.lat,S.lon,a.lat,a.lon);
   var distTxt,unit;
-  if(dist<1){
-    distTxt=String(Math.round(dist*1000));
-    unit=Math.round(dist*1000)===1?L.distUnit[0]:L.distUnit[1];
-  } else {
-    distTxt=dist.toFixed(1).replace('.',',');
-    unit=dist<2?L.distUnit[2]:L.distUnit[3];
-  }
+  if(dist<1){ distTxt=String(Math.round(dist*1000)); unit=Math.round(dist*1000)===1?L.distUnit[0]:L.distUnit[1]; }
+  else { distTxt=dist.toFixed(1).replace('.',','); unit=dist<2?L.distUnit[2]:L.distUnit[3]; }
   var txt=L.ttsText(card,deg,distTxt,unit);
   window.speechSynthesis.cancel();
-  var utt=new SpeechSynthesisUtterance(txt);
-  utt.lang=LANG==='it'?'it-IT':'nl-NL';
-  var v=getBestVoice(LANG);
-  if(v) utt.voice=v;
+  var utt=new SpeechSynthesisUtterance(txt); utt.lang=LANG==='it'?'it-IT':'nl-NL';
+  var v=getBestVoice(LANG); if(v) utt.voice=v;
   utt.rate=0.92; utt.pitch=1.0; utt.volume=1.0;
-  var ind=document.getElementById('tts-ind');
-  ind.style.display='inline-block';
-  utt.onend=function(){ ind.style.display='none'; };
-  utt.onerror=function(){ ind.style.display='none'; };
+  var ind=document.getElementById('tts-ind'); ind.style.display='inline-block';
+  utt.onend=function(){ ind.style.display='none'; }; utt.onerror=function(){ ind.style.display='none'; };
   window.speechSynthesis.speak(utt);
 }
 
-function showDebug(msg){
-  var el=document.getElementById('debug-row');
-  el.style.display='block'; el.textContent=msg;
-  setTimeout(function(){ el.style.display='none'; el.textContent=''; },6000);
-}
+function showDebug(msg){ var el=document.getElementById('debug-row'); el.style.display='block'; el.textContent=msg; setTimeout(function(){ el.style.display='none'; el.textContent=''; },6000); }
 function showMsg(m){ document.getElementById('error-msg').textContent=m; }
 
 // ═══════════════════════════════
@@ -1207,11 +1010,10 @@ if(location.search.includes('demo')){
   ['home','vac','dest','pers'].forEach(function(k){ refreshMarker(k); });
   var demoH=0;
   setInterval(function(){
-    demoH=(demoH+0.6)%360;
-    S.heading=demoH;
+    demoH=(demoH+0.6)%360; S.heading=demoH;
     document.getElementById('status-koers').textContent=T[LANG].course+': '+Math.round(demoH)+'°';
     document.getElementById('heading-display').textContent=toCard(demoH)+' — '+Math.round(demoH)+'°';
-    rotateMap(demoH);
+    rotateWindrose(demoH);  // windroze draait als kompasnaald
     updateAll();
   },50);
 }
