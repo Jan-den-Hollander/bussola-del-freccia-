@@ -1,17 +1,19 @@
 <!--
 ================================================================================
   Rivelazione bussola-del-freccia — Strumento di Rilevamento della direzione 
-  Versione 2.0 — 2025  (north-up fix)
+  Versione 3.0 — 2025
 ================================================================================
   Copyright (c) 2025 Jan den Hollander 
   Tutti i diritti riservati.
   Contact: jandenhollander@duck.com 
 ================================================================================
-  WIJZIGINGEN v2.0:
-  - Kaart: NORTH-UP (vast, N altijd boven) — map-rotating wrapper verwijderd
-  - Windroze: VAST op kaart, N altijd boven — draait nooit mee
-  - Rode naald: ENIGE element dat draait (bearing - heading)
-  - Stippen buitenring: heading-up gecorrigeerd (ongewijzigd correct)
+  V3.0 WIJZIGINGEN:
+  - Kaart: HEADING-UP (draait mee, "voor je" altijd boven) — zoals origineel
+  - Windroze: zit OP de kaart maar krijgt TEGENGESTELDE rotatie
+    → windroze-N wijst altijd naar geografisch noorden, ook als kaart draait
+  - Rode naald: draait, wijst naar bestemming relatief aan looprichting
+    needleAngle = bearingToTarget - heading
+    0° = naald omhoog = goede richting ✅
 ================================================================================
 -->
 <!DOCTYPE html>
@@ -101,9 +103,28 @@
   }
   svg#ring-svg { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 3; }
 
+  /* Kardinale punten op de buitenste ring — VAST, N altijd boven */
+  .cardinal {
+    position: absolute; font-family: 'Cinzel',serif;
+    font-size: clamp(8px,2vw,13px); font-weight: 700; color: var(--brass);
+    z-index: 8; transform: translate(-50%,-50%);
+    text-shadow: 0 0 5px rgba(0,0,0,.9); pointer-events: none;
+  }
+
+  /* Stippen op ring — heading-up via JS */
+  .ring-dot {
+    position: absolute; width: 14px; height: 14px; border-radius: 50%;
+    border: 2px solid rgba(255,255,255,.5); transform: translate(-50%,-50%);
+    z-index: 9; display: none; box-shadow: 0 0 8px currentColor;
+    transition: left .4s ease, top .4s ease;
+  }
+  .ring-dot.active-dot { width: 19px; height: 19px; border-color: #fff; }
+
   /*
-   * NORTH-UP: map-viewport bevat kaart + windroze VAST.
-   * Geen roterende wrapper. N altijd boven.
+   * map-viewport: het ronde kaartvenster
+   * map-rotating: draait heading-up (kaart volgt looprichting)
+   * windrose-svg: zit IN map-rotating maar krijgt +heading rotatie terug
+   *               zodat N altijd naar geografisch noorden wijst
    */
   .map-viewport {
     position: absolute; inset: 17%; border-radius: 50%; overflow: hidden;
@@ -111,15 +132,30 @@
     box-shadow: inset 0 0 20px rgba(0,0,0,.65), 0 0 0 2px #4a3605;
     transition: opacity .3s;
   }
-
-  /* Leaflet kaart — VAST, north-up */
+  #map-rotating {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    transform-origin: 50% 50%;
+    /* rotatie via JS: rotate(-heading) */
+  }
   #map {
     position: absolute;
     width: 200%; height: 200%;
     top: -50%; left: -50%;
     transform-origin: 50% 50%;
     z-index: 1;
-    /* geen transform — north-up */
+  }
+
+  /*
+   * windrose-svg: zit in map-rotating (draait mee met kaart),
+   * maar via JS krijgt het transform: rotate(+heading)
+   * Netto effect: kaart draait -heading, windroze draait +heading
+   * → windroze staat altijd geografisch correct (N = noord)
+   */
+  #windrose-svg {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    z-index: 7; pointer-events: none;
+    transform-origin: 50% 50%;
+    /* rotatie via JS: rotate(+heading) — compenseert kaartrotatie */
   }
 
   .map-overlay {
@@ -129,13 +165,6 @@
   }
   .leaflet-control-attribution { font-size: 7px !important; opacity: .4; }
   .leaflet-control-zoom { display: none !important; }
-
-  /* Windroze — VAST op kaart, N altijd boven */
-  #windrose-svg {
-    position: absolute; inset: 0; width: 100%; height: 100%;
-    z-index: 7; pointer-events: none;
-    /* geen transform — north-up */
-  }
 
   .cache-progress {
     position: absolute; bottom: 0; left: 0; right: 0;
@@ -155,7 +184,6 @@
     font-size: .58rem; font-family: 'Cinzel',serif; letter-spacing: .05em;
     padding: 4px 7px; border-radius: 2px; cursor: pointer;
   }
-
   .cache-btn {
     position: absolute; bottom: 18%; left: 18%;
     z-index: 30; background: rgba(20,12,4,.9);
@@ -164,7 +192,7 @@
     padding: 4px 7px; border-radius: 2px; cursor: pointer;
   }
 
-  /* Jij — BLAUW, statisch middelpunt, buiten map-viewport */
+  /* Jij — BLAUW, statisch middelpunt, buiten map-rotating */
   .you-dot {
     position: absolute; top: 50%; left: 50%;
     width: 18px; height: 18px;
@@ -184,11 +212,10 @@
   }
 
   /*
-   * RODE NAALD — ENIGE element dat draait.
+   * RODE NAALD — ENIGE die draait voor navigatie.
    * needleAngle = bearingToTarget - currentHeading
-   *   0°  → omhoog  → je loopt de goede kant op ✅
+   *   0°  → omhoog  → goede richting ✅
    *   90° → rechts  → rechts afslaan
-   * Staat buiten map-viewport, over alles heen.
    */
   #needle-layer {
     position: absolute; inset: 17%; border-radius: 50%;
@@ -198,15 +225,6 @@
     width: 100%; height: 100%; transform-origin: center center;
     transition: transform .35s cubic-bezier(.25,.46,.45,.94);
   }
-
-  /* Stippen op ring — heading-up gecorrigeerd via JS */
-  .ring-dot {
-    position: absolute; width: 14px; height: 14px; border-radius: 50%;
-    border: 2px solid rgba(255,255,255,.5); transform: translate(-50%,-50%);
-    z-index: 9; display: none; box-shadow: 0 0 8px currentColor;
-    transition: left .4s ease,top .4s ease;
-  }
-  .ring-dot.active-dot { width: 19px; height: 19px; border-color: #fff; }
 
   .glass-layer {
     position: absolute; inset: 17%; border-radius: 50%;
@@ -219,12 +237,6 @@
     background: radial-gradient(circle at 35% 30%,#fff8d0,#c9972a 50%,#5e3a00);
     border: 1px solid #2a1c04; transform: translate(-50%,-50%);
     z-index: 26; box-shadow: 0 0 6px rgba(0,0,0,.7);
-  }
-  .cardinal {
-    position: absolute; font-family: 'Cinzel',serif;
-    font-size: clamp(8px,2vw,13px); font-weight: 700; color: var(--brass);
-    z-index: 8; transform: translate(-50%,-50%);
-    text-shadow: 0 0 5px rgba(0,0,0,.9); pointer-events: none;
   }
 
   .info-panel {
@@ -390,7 +402,7 @@
     <div class="compass-rim"></div>
     <div class="degree-ring"><svg id="ring-svg" viewBox="0 0 400 400"></svg></div>
 
-    <!-- Kardinale punten — VAST, N altijd boven -->
+    <!-- Kardinale punten op de buitenste ring — VAST, N altijd boven -->
     <div class="cardinal" style="top:8%;left:50%">N</div>
     <div class="cardinal" style="top:92%;left:50%">S</div>
     <div class="cardinal" style="top:50%;left:93%">E</div>
@@ -403,72 +415,76 @@
     <div class="ring-dot" id="dot-pers" style="color:var(--orange-pers);background:var(--orange-pers)"></div>
 
     <!--
-      NORTH-UP: map-viewport bevat kaart + windroze VAST.
-      Geen map-rotating wrapper. Kaart draait NOOIT.
-      Windroze N staat altijd boven.
+      map-rotating: draait -heading (kaart heading-up, "voor je" altijd boven)
+      windrose-svg: zit erin maar draait +heading terug
+                    → netto = 0° → N-pijl wijst altijd naar geografisch noorden
     -->
     <div class="map-viewport" id="map-viewport">
-      <div id="map"></div>
+      <div id="map-rotating">
+        <div id="map"></div>
 
-      <!-- Windroze VAST op kaart — N altijd boven -->
-      <svg id="windrose-svg" viewBox="0 0 300 300">
-        <defs>
-          <filter id="wr-glow" x="-40%" y="-40%" width="180%" height="180%">
-            <feGaussianBlur stdDeviation="1.2" result="b"/>
-            <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
-          </filter>
-        </defs>
-        <circle cx="150" cy="150" r="132" fill="none" stroke="rgba(160,110,20,0.18)" stroke-width="0.8"/>
-        <!-- NOORD — rood, altijd boven -->
-        <polygon points="150,18  154,108 150,122 146,108" fill="rgba(160,40,30,0.38)" filter="url(#wr-glow)"/>
-        <polygon points="150,18  152,60  150,72  148,60"  fill="rgba(200,60,40,0.55)" filter="url(#wr-glow)"/>
-        <!-- ZUID -->
-        <polygon points="150,282 154,192 150,178 146,192" fill="rgba(130,95,20,0.28)"/>
-        <polygon points="150,282 152,240 150,228 148,240" fill="rgba(150,110,25,0.35)"/>
-        <!-- OOST -->
-        <polygon points="282,150 192,154 178,150 192,146" fill="rgba(130,95,20,0.28)"/>
-        <polygon points="282,150 240,152 228,150 240,148" fill="rgba(150,110,25,0.35)"/>
-        <!-- WEST -->
-        <polygon points="18,150  108,154 122,150 108,146" fill="rgba(130,95,20,0.28)"/>
-        <polygon points="18,150  60,152  72,150  60,148"  fill="rgba(150,110,25,0.35)"/>
-        <!-- Tussenrichtingen -->
-        <polygon points="243,57  196,118 188,110 196,102" fill="rgba(130,95,20,0.20)"/>
-        <polygon points="243,243 196,182 188,190 196,198" fill="rgba(130,95,20,0.18)"/>
-        <polygon points="57,243  104,182 112,190 104,198" fill="rgba(130,95,20,0.18)"/>
-        <polygon points="57,57   104,118 112,110 104,102" fill="rgba(130,95,20,0.20)"/>
-        <!-- Labels -->
-        <text x="150" y="16" text-anchor="middle" font-family="Cinzel,serif" font-size="15" font-weight="700"
-          fill="rgba(200,55,40,0.72)" filter="url(#wr-glow)">N</text>
-        <text x="150" y="296" text-anchor="middle" font-family="Cinzel,serif" font-size="12" font-weight="700"
-          fill="rgba(180,130,30,0.42)">S</text>
-        <text x="290" y="155" text-anchor="middle" font-family="Cinzel,serif" font-size="12" font-weight="700"
-          fill="rgba(180,130,30,0.42)">E</text>
-        <text x="10" y="155" text-anchor="middle" font-family="Cinzel,serif" font-size="12" font-weight="700"
-          fill="rgba(180,130,30,0.42)">O</text>
-        <circle cx="150" cy="150" r="28" fill="none" stroke="rgba(150,105,20,0.22)" stroke-width="1"/>
-        <circle cx="150" cy="150" r="5" fill="rgba(190,140,30,0.45)" stroke="rgba(100,70,10,0.35)" stroke-width="1"/>
-        <circle cx="150" cy="150" r="2" fill="rgba(220,170,50,0.60)"/>
-      </svg>
+        <!--
+          Windroze: transform-origin center.
+          JS stelt: windrose-svg.style.transform = rotate(+heading)
+          Kaart draait -heading, windroze compenseert met +heading → staat vast op noord.
+        -->
+        <svg id="windrose-svg" viewBox="0 0 300 300">
+          <defs>
+            <filter id="wr-glow" x="-40%" y="-40%" width="180%" height="180%">
+              <feGaussianBlur stdDeviation="1.2" result="b"/>
+              <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+          </defs>
+          <circle cx="150" cy="150" r="132" fill="none" stroke="rgba(160,110,20,0.18)" stroke-width="0.8"/>
+          <!-- NOORD — rood accent, N-pijl wijst altijd geografisch noord -->
+          <polygon points="150,18  154,108 150,122 146,108" fill="rgba(160,40,30,0.38)" filter="url(#wr-glow)"/>
+          <polygon points="150,18  152,60  150,72  148,60"  fill="rgba(200,60,40,0.55)" filter="url(#wr-glow)"/>
+          <!-- ZUID -->
+          <polygon points="150,282 154,192 150,178 146,192" fill="rgba(130,95,20,0.28)"/>
+          <polygon points="150,282 152,240 150,228 148,240" fill="rgba(150,110,25,0.35)"/>
+          <!-- OOST -->
+          <polygon points="282,150 192,154 178,150 192,146" fill="rgba(130,95,20,0.28)"/>
+          <polygon points="282,150 240,152 228,150 240,148" fill="rgba(150,110,25,0.35)"/>
+          <!-- WEST -->
+          <polygon points="18,150  108,154 122,150 108,146" fill="rgba(130,95,20,0.28)"/>
+          <polygon points="18,150  60,152  72,150  60,148"  fill="rgba(150,110,25,0.35)"/>
+          <!-- Tussenrichtingen -->
+          <polygon points="243,57  196,118 188,110 196,102" fill="rgba(130,95,20,0.20)"/>
+          <polygon points="243,243 196,182 188,190 196,198" fill="rgba(130,95,20,0.18)"/>
+          <polygon points="57,243  104,182 112,190 104,198" fill="rgba(130,95,20,0.18)"/>
+          <polygon points="57,57   104,118 112,110 104,102" fill="rgba(130,95,20,0.20)"/>
+          <!-- Labels -->
+          <text x="150" y="16" text-anchor="middle" font-family="Cinzel,serif" font-size="15" font-weight="700"
+            fill="rgba(200,55,40,0.72)" filter="url(#wr-glow)">N</text>
+          <text x="150" y="296" text-anchor="middle" font-family="Cinzel,serif" font-size="12" font-weight="700"
+            fill="rgba(180,130,30,0.42)">S</text>
+          <text x="290" y="155" text-anchor="middle" font-family="Cinzel,serif" font-size="12" font-weight="700"
+            fill="rgba(180,130,30,0.42)">E</text>
+          <text x="10" y="155" text-anchor="middle" font-family="Cinzel,serif" font-size="12" font-weight="700"
+            fill="rgba(180,130,30,0.42)">O</text>
+          <circle cx="150" cy="150" r="28" fill="none" stroke="rgba(150,105,20,0.22)" stroke-width="1"/>
+          <circle cx="150" cy="150" r="5" fill="rgba(190,140,30,0.45)" stroke="rgba(100,70,10,0.35)" stroke-width="1"/>
+          <circle cx="150" cy="150" r="2" fill="rgba(220,170,50,0.60)"/>
+        </svg>
 
-      <div class="map-overlay"></div>
-      <div class="cache-progress" id="cache-progress">
-        <div class="cache-progress-bar" id="cache-progress-bar"></div>
+        <div class="map-overlay"></div>
+        <div class="cache-progress" id="cache-progress">
+          <div class="cache-progress-bar" id="cache-progress-bar"></div>
+        </div>
       </div>
     </div>
 
-    <!-- Jij-stip BUITEN map-viewport — statisch middelpunt -->
+    <!-- Jij-stip BUITEN map-rotating — statisch middelpunt -->
     <div class="you-dot" id="you-dot"></div>
 
     <div class="map-toggle" id="map-toggle" onclick="toggleMap()">🗺</div>
-    <div class="cache-btn" id="cache-btn" onclick="startCacheTiles()" title="Download kaart voor offline gebruik">⬇️</div>
+    <div class="cache-btn"  id="cache-btn"  onclick="startCacheTiles()" title="Download kaart">⬇️</div>
 
     <!--
-      RODE NAALD — ENIGE element dat draait.
-      needleAngle = bearingToTarget - currentHeading
-        0°  → omhoog  → je loopt de goede kant op ✅
+      RODE NAALD — wijst naar bestemming, heading-up gecorrigeerd.
+      needleAngle = bearingToTarget - heading
+        0°  → omhoog  → goede richting ✅
         90° → rechts  → rechts afslaan
-       180° → omlaag  → verkeerde richting
-       270° → links   → links afslaan
     -->
     <div id="needle-layer">
       <svg id="needle-svg" viewBox="0 0 200 200">
@@ -477,10 +493,8 @@
             <feDropShadow dx="0" dy="0" stdDeviation="3" flood-color="rgba(0,0,0,.6)"/>
           </filter>
         </defs>
-        <!-- Rood = richting naar bestemming -->
         <polygon points="100,18 109,92 100,104 91,92"   fill="#cc2222" filter="url(#ns)"/>
         <polygon points="100,18 104,36 100,50 96,36"    fill="#ff5555" opacity=".5"/>
-        <!-- Donker = tegenovergestelde richting -->
         <polygon points="100,182 109,108 100,96 91,108" fill="#2a1c04" filter="url(#ns)"/>
         <polygon points="100,88 106,100 100,112 94,100" fill="#c9972a"/>
       </svg>
@@ -518,7 +532,7 @@
         <input class="wp-input" id="inp-home" type="text" autocomplete="off" spellcheck="false"
           data-ph-it="Via, Città…" data-ph-nl="Straat, Stad…" placeholder="Via, Città…">
         <button class="wp-btn t" data-it="CERCA" data-nl="ZOEK" onclick="geocodeWaypoint('home')">CERCA</button>
-        <button class="wp-btn" onclick="useCurrentLocation('home')" title="Posizione attuale / Huidige positie">📍</button>
+        <button class="wp-btn" onclick="useCurrentLocation('home')" title="Posizione attuale">📍</button>
       </div>
       <div class="wp-dist" id="dist-home"></div>
     </div>
@@ -576,22 +590,19 @@
   <div class="manual-title t" data-it="📖 MANUALE D'USO" data-nl="📖 GEBRUIKSHANDLEIDING">📖 MANUALE D'USO</div>
 
   <div class="manual-section">
-    <h3>🚀 <span>Avvio rapido / Snel starten</span></h3>
-    <p>1. IT: Inserisci gli indirizzi e tocca CERCA per ogni campo.</p>
-    <p>1. NL: Vul de adressen in en tik ZOEK voor elk veld.</p>
-    <p>2. IT: Tocca 💾 SALVA, poi ▶ ATTIVA BUSSOLA.</p>
-    <p>2. NL: Tik 💾 SLA OP, dan ▶ KOMPAS ACTIVEREN.</p>
+    <h3>🚀 Avvio rapido / Snel starten</h3>
+    <p>1. Inserisci gli indirizzi e tocca CERCA / Vul adressen in en tik ZOEK.</p>
+    <p>2. Tocca 💾 SALVA / Tik 💾 SLA OP.</p>
+    <p>3. Tocca ▶ ATTIVA BUSSOLA / Tik ▶ KOMPAS ACTIVEREN.</p>
   </div>
 
   <div class="manual-section">
     <h3>🧭 Come funziona / Hoe het werkt</h3>
-    <p>IT: La <strong style="color:#cc2222">freccia ROSSA</strong> ruota e indica sempre la direzione verso il bersaglio attivo, corretta per la tua direzione di marcia.</p>
-    <p>NL: De <strong style="color:#cc2222">RODE naald</strong> draait en wijst naar het actieve doel, gecorrigeerd voor jouw looprichting.</p>
-    <p style="margin-top:6px">✅ Freccia/Naald <strong>su/omhoog</strong> = richting juist!</p>
-    <p>↪ Freccia destra / Naald rechts = rechts afslaan</p>
-    <p>↩ Freccia sinistra / Naald links = links afslaan</p>
-    <p style="margin-top:6px">🗺 IT: La mappa è orientata a <strong>nord fisso</strong>. Solo la freccia ruota.</p>
-    <p>🗺 NL: De kaart staat op <strong>vast noorden</strong>. Alleen de naald draait.</p>
+    <p><strong style="color:#cc2222">Freccia ROSSA / RODE naald</strong> — wijst naar het actieve doel, gecorrigeerd voor jouw looprichting.</p>
+    <p style="margin-top:5px">✅ Naald omhoog = goede richting!</p>
+    <p>↪ Naald rechts = rechts afslaan &nbsp; ↩ Naald links = links afslaan</p>
+    <p style="margin-top:7px">🗺 <strong>Kaart:</strong> draait mee met jouw looprichting ("voor je" altijd boven).</p>
+    <p>🧭 <strong>Windroze-N:</strong> wijst altijd naar het geografische noorden, ook als de kaart draait. Zo weet je altijd waar noord is.</p>
   </div>
 
   <div class="manual-section">
@@ -599,33 +610,32 @@
     <div class="dot-legend">
       <div class="dot-row">
         <div class="dot-swatch" style="background:var(--blue-you);box-shadow:0 0 8px var(--blue-you)"></div>
-        <div class="dot-txt"><span class="it">🔵 BLU/Blauw — Sei tu / Dat ben jij. Altijd midden.</span></div>
+        <div class="dot-txt"><span class="it">🔵 Sei tu / Dat ben jij — altijd midden.</span></div>
       </div>
       <div class="dot-row">
         <div class="dot-swatch" style="background:var(--gold-home)"></div>
-        <div class="dot-txt"><span class="it">🟡 ORO/Goud — Casa / Thuis</span></div>
+        <div class="dot-txt"><span class="it">🟡 Casa / Thuis</span></div>
       </div>
       <div class="dot-row">
         <div class="dot-swatch" style="background:var(--green-vac)"></div>
-        <div class="dot-txt"><span class="it">🟢 VERDE/Groen — Vacanza / Vakantie</span></div>
+        <div class="dot-txt"><span class="it">🟢 Vacanza / Vakantie</span></div>
       </div>
       <div class="dot-row">
         <div class="dot-swatch" style="background:var(--red-dest)"></div>
-        <div class="dot-txt"><span class="it">🔴 ROSSO/Rood — Destinazione. La freccia punta qui!</span></div>
+        <div class="dot-txt"><span class="it">🔴 Destinazione — la freccia punta qui!</span></div>
       </div>
       <div class="dot-row">
         <div class="dot-swatch" style="background:var(--orange-pers)"></div>
-        <div class="dot-txt"><span class="it">🟠 ARANCIONE/Oranje — Persona / Persoon</span></div>
+        <div class="dot-txt"><span class="it">🟠 Persona / Persoon</span></div>
       </div>
     </div>
-    <p style="margin-top:8px">IT/NL: I punti sul cerchio / De stippen op de ring tonen de richting t.o.v. jouw looprichting (heading-up).</p>
+    <p style="margin-top:8px">De stippen op de buitenring tonen de richting t.o.v. jouw looprichting.</p>
   </div>
 
   <div class="manual-section">
     <h3>⚠️ Precisione / Nauwkeurigheid</h3>
-    <p>IT: Se la distanza sembra sbagliata, aggiungi il paese: <em>Heeze, Nederland</em></p>
-    <p>NL: Voeg land of postcode toe: <em>Heeze, Nederland</em></p>
-    <p style="margin-top:5px">💡 Offline: ⬇️ thuis met wifi downloaden.</p>
+    <p>Voeg land of postcode toe: <em>Heeze, Nederland</em></p>
+    <p style="margin-top:5px">💡 Offline: ⬇️ thuis met wifi voor kaart tegels.</p>
   </div>
 
   <div class="manual-back" onclick="showScreen('compass')" style="margin-top:8px;align-self:center">
@@ -727,7 +737,7 @@ var S = {
 var WP_COLOR = {home:'#ffd700',vac:'#2ecc71',dest:'#cc2222',pers:'#ff8c00'};
 
 // ═══════════════════════════════
-// LEAFLET — NORTH-UP, kaart beweegt nooit
+// LEAFLET
 // ═══════════════════════════════
 var map, markers = {};
 var MAP_ZOOM = 16;
@@ -770,6 +780,41 @@ function toggleMap() {
   S.mapVisible = !S.mapVisible;
   document.getElementById('map-viewport').style.opacity = S.mapVisible ? '1' : '0';
   document.getElementById('map-toggle').textContent = S.mapVisible ? T[LANG].mapOn : T[LANG].mapOff;
+}
+
+// ═══════════════════════════════
+// KAART + WINDROZE ANIMATIE
+//
+// Kaart (map-rotating):  draait -heading  → heading-up ("voor je" boven)
+// Windroze (windrose-svg): draait +heading → compenseert kaartrotatie
+//                          → netto: windroze staat vast op geografisch noord
+//
+// Smooth via requestAnimationFrame
+// ═══════════════════════════════
+var _targetRot = 0, _currentRot = 0, _rafId = null;
+
+function rotateMap(headingDeg) {
+  _targetRot = -headingDeg;
+  if (!_rafId) _rafId = requestAnimationFrame(_animateMap);
+}
+
+function _animateMap() {
+  _rafId = null;
+  var diff = _targetRot - _currentRot;
+  while (diff >  180) diff -= 360;
+  while (diff < -180) diff += 360;
+  _currentRot += diff * 0.12;
+
+  // Kaart draait heading-up
+  var mapEl = document.getElementById('map-rotating');
+  if (mapEl) mapEl.style.transform = 'rotate(' + _currentRot + 'deg)';
+
+  // Windroze compenseert: draait +heading zodat N altijd naar noorden wijst
+  // _currentRot = -heading (benaderd), dus windroze = -_currentRot = +heading
+  var wrEl = document.getElementById('windrose-svg');
+  if (wrEl) wrEl.style.transform = 'rotate(' + (-_currentRot) + 'deg)';
+
+  if (Math.abs(diff) > 0.05) _rafId = requestAnimationFrame(_animateMap);
 }
 
 // ═══════════════════════════════
@@ -864,7 +909,7 @@ async function geocodeWaypoint(k){
   showMsg(T[LANG].search);
   try{
     var url='https://nominatim.openstreetmap.org/search?q='+encodeURIComponent(input)+'&format=json&limit=3&addressdetails=1';
-    var resp=await fetch(url,{headers:{'Accept-Language':LANG==='it'?'it':'nl','User-Agent':'BussolaTerreno/2.0'}});
+    var resp=await fetch(url,{headers:{'Accept-Language':LANG==='it'?'it':'nl','User-Agent':'BussolaTerreno/3.0'}});
     var data=await resp.json();
     if(!data.length){ showMsg(T[LANG].noAddr); return; }
     var r=data[0];
@@ -1012,7 +1057,7 @@ function onOri(e){
   S.heading=h;
   document.getElementById('status-koers').textContent=T[LANG].course+': '+Math.round(h)+'°';
   document.getElementById('heading-display').textContent=toCard(h)+' — '+Math.round(h)+'°';
-  // NORTH-UP: kaart draait NIET. Geen rotateMap() aanroep.
+  rotateMap(h);  // kaart heading-up, windroze compenseert automatisch
   updateAll();
 }
 
@@ -1037,28 +1082,19 @@ function brg(la1,lo1,la2,lo2){
 }
 
 // ═══════════════════════════════
-// UPDATE — NORTH-UP
+// UPDATE
 //
-// Kaart:     VAST, N altijd boven
-// Windroze:  VAST op kaart, N altijd boven
+// Rode naald:   needleAngle = bearingToTarget - heading (heading-up)
+//   0°  → omhoog  → goede richting ✅
+//   90° → rechts  → rechts afslaan
 //
-// Rode naald (ENIGE die draait):
-//   needleAngle = bearingToTarget - currentHeading
-//   0°  → naald omhoog  → goede richting ✅
-//   90° → naald rechts  → rechts afslaan
-//  180° → naald omlaag  → verkeerde richting
-//  270° → naald links   → links afslaan
-//
-// Stippen op buitenring (heading-up):
-//   ringAngle = bearingToWaypoint - currentHeading
+// Stippen ring: ringAngle = bearingToWaypoint - heading (heading-up)
 //   0°  → waypoint recht voor je → stip boven op ring
-//   90° → waypoint rechts        → stip rechts op ring
 // ═══════════════════════════════
 function updateAll(){
   if(!S.lat) return;
   var L=T[LANG],w=S.waypoints;
 
-  // Afstanden per waypoint
   ['home','vac','dest','pers'].forEach(function(k){
     var el=document.getElementById('dist-'+k);
     if(w[k].lat!==null){
@@ -1069,7 +1105,6 @@ function updateAll(){
     }
   });
 
-  // Stippen op buitenring — heading-up
   var headingForRing=S.heading!==null?S.heading:0;
   ['home','vac','dest','pers'].forEach(function(k){
     var dot=document.getElementById('dot-'+k);
@@ -1083,21 +1118,12 @@ function updateAll(){
     }
   });
 
-  // Actief doel: afstand + RODE NAALD draait
   var a=w[S.activeTarget];
   if(a.lat!==null){
     var absBearing=brg(S.lat,S.lon,a.lat,a.lon);
     var d=hav(S.lat,S.lon,a.lat,a.lon);
-
-    // Naald: relatieve hoek t.o.v. jouw looprichting
-    var needleAngle;
-    if(S.heading!==null){
-      needleAngle=(absBearing-S.heading+360)%360;
-    } else {
-      needleAngle=absBearing; // north-up fallback als geen heading
-    }
+    var needleAngle=S.heading!==null?(absBearing-S.heading+360)%360:absBearing;
     document.getElementById('needle-svg').style.transform='rotate('+needleAngle+'deg)';
-
     document.getElementById('dist-main').textContent=d<1?Math.round(d*1000)+' m':d.toFixed(2)+' km';
     document.getElementById('dist-label').textContent=L.toLbl[S.activeTarget]+' (hemelsbreed)';
   }
@@ -1105,8 +1131,7 @@ function updateAll(){
 
 function placeDot(el,angleDeg){
   var c=document.getElementById('compass');
-  var sz=c.offsetWidth,ctr=sz/2;
-  var r=sz*0.415;
+  var sz=c.offsetWidth,ctr=sz/2,r=sz*0.415;
   var rad=(angleDeg-90)*Math.PI/180;
   el.style.left=(ctr+r*Math.cos(rad))+'px';
   el.style.top=(ctr+r*Math.sin(rad))+'px';
@@ -1155,9 +1180,6 @@ function speak(){
   window.speechSynthesis.speak(utt);
 }
 
-// ═══════════════════════════════
-// DEBUG / BERICHTEN
-// ═══════════════════════════════
 function showDebug(msg){
   var el=document.getElementById('debug-row');
   el.style.display='block'; el.textContent=msg;
@@ -1189,7 +1211,7 @@ if(location.search.includes('demo')){
     S.heading=demoH;
     document.getElementById('status-koers').textContent=T[LANG].course+': '+Math.round(demoH)+'°';
     document.getElementById('heading-display').textContent=toCard(demoH)+' — '+Math.round(demoH)+'°';
-    // NORTH-UP: geen rotateMap()
+    rotateMap(demoH);
     updateAll();
   },50);
 }
