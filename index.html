@@ -1,17 +1,17 @@
 <!--
 ================================================================================
   Rivelazione bussola-del-freccia — Strumento di Rilevamento della direzione 
-  Versione 1.0 — 2025
+  Versione 2.0 — 2025  (north-up fix)
 ================================================================================
   Copyright (c) 2025 Jan den Hollander 
   Tutti i diritti riservati.
-
-  Quest'opera è protetta dal diritto d'autore (Legge 633/1941, Italia;
-  Auteurswet 1912, Paesi Bassi) e dalla Convenzione di Berna.
-  È vietata la riproduzione, distribuzione o creazione di opere derivate
-  senza esplicito consenso scritto dell'autore.
-
   Contact: jandenhollander@duck.com 
+================================================================================
+  WIJZIGINGEN v2.0:
+  - Kaart: NORTH-UP (vast, N altijd boven) — map-rotating wrapper verwijderd
+  - Windroze: VAST op kaart, N altijd boven — draait nooit mee
+  - Rode naald: ENIGE element dat draait (bearing - heading)
+  - Stippen buitenring: heading-up gecorrigeerd (ongewijzigd correct)
 ================================================================================
 -->
 <!DOCTYPE html>
@@ -83,9 +83,6 @@
   }
   .top-icon-btn:active { background: rgba(200,160,40,.3); }
 
-  /* ═══════════════════════════════
-     KOMPAS
-  ═══════════════════════════════ */
   .compass-wrap {
     position: relative;
     width: min(92vw,430px); height: min(92vw,430px);
@@ -104,32 +101,27 @@
   }
   svg#ring-svg { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 3; }
 
-  /* Kaartvenster */
+  /*
+   * NORTH-UP: map-viewport bevat kaart + windroze VAST.
+   * Geen roterende wrapper. N altijd boven.
+   */
   .map-viewport {
     position: absolute; inset: 17%; border-radius: 50%; overflow: hidden;
     z-index: 4; background: #3a4a3a;
     box-shadow: inset 0 0 20px rgba(0,0,0,.65), 0 0 0 2px #4a3605;
     transition: opacity .3s;
   }
-  /* 
-     FIX #2: Kaart + windroos draaien samen als één geheel.
-     De kaart-container draait, en daarbinnen:
-     - #map (dubbele grootte, gecentreerd) volgt de rotatie
-     - windrose-svg staat vast IN de kaart-container → draait mee
-     - alleen jij-stip en naald staan BUITEN de container → draaien NIET
-  */
-  #map-rotating {
-    position: absolute; inset: 0; width: 100%; height: 100%;
-    transform-origin: 50% 50%;
-    /* rotatie wordt via JS op dit element gezet */
-  }
+
+  /* Leaflet kaart — VAST, north-up */
   #map {
     position: absolute;
     width: 200%; height: 200%;
     top: -50%; left: -50%;
     transform-origin: 50% 50%;
     z-index: 1;
+    /* geen transform — north-up */
   }
+
   .map-overlay {
     position: absolute; inset: 0; border-radius: 50%;
     background: rgba(120,70,10,.2); pointer-events: none; z-index: 6;
@@ -138,7 +130,41 @@
   .leaflet-control-attribution { font-size: 7px !important; opacity: .4; }
   .leaflet-control-zoom { display: none !important; }
 
-  /* Jij — BLAUW, statisch middelpunt (buiten map-rotating) */
+  /* Windroze — VAST op kaart, N altijd boven */
+  #windrose-svg {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    z-index: 7; pointer-events: none;
+    /* geen transform — north-up */
+  }
+
+  .cache-progress {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    height: 4px; background: rgba(0,0,0,.5); z-index: 40; border-radius: 0 0 50% 50%;
+    overflow: hidden; display: none;
+  }
+  .cache-progress-bar {
+    height: 100%; width: 0%;
+    background: linear-gradient(90deg, #2ecc71, #27ae60);
+    transition: width .2s;
+  }
+
+  .map-toggle {
+    position: absolute; bottom: 18%; right: 18%;
+    z-index: 30; background: rgba(20,12,4,.9);
+    border: 1px solid var(--brass-dark); color: var(--brass);
+    font-size: .58rem; font-family: 'Cinzel',serif; letter-spacing: .05em;
+    padding: 4px 7px; border-radius: 2px; cursor: pointer;
+  }
+
+  .cache-btn {
+    position: absolute; bottom: 18%; left: 18%;
+    z-index: 30; background: rgba(20,12,4,.9);
+    border: 1px solid var(--brass-dark); color: var(--brass);
+    font-size: .58rem; font-family: 'Cinzel',serif; letter-spacing: .05em;
+    padding: 4px 7px; border-radius: 2px; cursor: pointer;
+  }
+
+  /* Jij — BLAUW, statisch middelpunt, buiten map-viewport */
   .you-dot {
     position: absolute; top: 50%; left: 50%;
     width: 18px; height: 18px;
@@ -157,37 +183,13 @@
     50%      { box-shadow: 0 0 20px rgba(30,130,255,1), 0 0 0 9px rgba(30,130,255,.07); }
   }
 
-  /* Cache voortgangsbalk */
-  .cache-progress {
-    position: absolute; bottom: 0; left: 0; right: 0;
-    height: 4px; background: rgba(0,0,0,.5); z-index: 40; border-radius: 0 0 50% 50%;
-    overflow: hidden; display: none;
-  }
-  .cache-progress-bar {
-    height: 100%; width: 0%;
-    background: linear-gradient(90deg, #2ecc71, #27ae60);
-    transition: width .2s;
-  }
-
-  /* Kaart-toggle */
-  .map-toggle {
-    position: absolute; bottom: 18%; right: 18%;
-    z-index: 30; background: rgba(20,12,4,.9);
-    border: 1px solid var(--brass-dark); color: var(--brass);
-    font-size: .58rem; font-family: 'Cinzel',serif; letter-spacing: .05em;
-    padding: 4px 7px; border-radius: 2px; cursor: pointer;
-  }
-
-  /* Cache knop */
-  .cache-btn {
-    position: absolute; bottom: 18%; left: 18%;
-    z-index: 30; background: rgba(20,12,4,.9);
-    border: 1px solid var(--brass-dark); color: var(--brass);
-    font-size: .58rem; font-family: 'Cinzel',serif; letter-spacing: .05em;
-    padding: 4px 7px; border-radius: 2px; cursor: pointer;
-  }
-
-  /* Naald — staat BUITEN map-viewport, over alles heen */
+  /*
+   * RODE NAALD — ENIGE element dat draait.
+   * needleAngle = bearingToTarget - currentHeading
+   *   0°  → omhoog  → je loopt de goede kant op ✅
+   *   90° → rechts  → rechts afslaan
+   * Staat buiten map-viewport, over alles heen.
+   */
   #needle-layer {
     position: absolute; inset: 17%; border-radius: 50%;
     z-index: 22; pointer-events: none;
@@ -197,7 +199,7 @@
     transition: transform .35s cubic-bezier(.25,.46,.45,.94);
   }
 
-  /* Stippen op ring — BUITEN alles, op de gradenring */
+  /* Stippen op ring — heading-up gecorrigeerd via JS */
   .ring-dot {
     position: absolute; width: 14px; height: 14px; border-radius: 50%;
     border: 2px solid rgba(255,255,255,.5); transform: translate(-50%,-50%);
@@ -206,7 +208,6 @@
   }
   .ring-dot.active-dot { width: 19px; height: 19px; border-color: #fff; }
 
-  /* Glasglans */
   .glass-layer {
     position: absolute; inset: 17%; border-radius: 50%;
     background: radial-gradient(ellipse at 28% 22%,rgba(255,255,255,.12) 0%,transparent 52%);
@@ -226,9 +227,6 @@
     text-shadow: 0 0 5px rgba(0,0,0,.9); pointer-events: none;
   }
 
-  /* ═══════════════════════════════
-     INFO PANEL
-  ═══════════════════════════════ */
   .info-panel {
     margin-top: 10px; width: min(92vw,430px);
     background: rgba(20,12,4,.93); border: 1px solid var(--brass-dark);
@@ -245,18 +243,12 @@
   }
   .dist-label { text-align: center; font-size: .66rem; color: var(--brass-dark); letter-spacing: .1em; }
   #heading-display { text-align: center; font-size: .6rem; color: rgba(200,160,40,.5); margin-top: 2px; }
-
-  /* Debug info */
   #debug-row {
     font-size: .52rem; color: rgba(200,160,40,.35); text-align:center;
     margin-top:2px; font-family: monospace; display:none;
   }
 
-  /* ═══════════════════════════════
-     WAYPOINTS
-  ═══════════════════════════════ */
   .waypoints { margin-top: 10px; width: min(92vw,430px); }
-
   .wp-block {
     background: rgba(20,12,4,.88); border: 1px solid;
     border-radius: 3px; padding: 7px 10px; margin-bottom: 7px;
@@ -329,9 +321,6 @@
     margin-top: 5px; min-height: 15px; font-style: italic;
   }
 
-  /* ═══════════════════════════════
-     HANDLEIDING
-  ═══════════════════════════════ */
   .manual-screen { padding: 0 4px 20px; }
   .manual-back {
     display: flex; align-items: center; gap: 8px;
@@ -362,7 +351,6 @@
     margin-bottom: 4px;
   }
   .manual-section ul { padding-left: 14px; }
-  .manual-section .nl { color: rgba(200,160,40,.6); font-style: italic; font-size: .68rem; }
   .dot-legend { display: flex; flex-direction: column; gap: 7px; margin-top: 6px; }
   .dot-row { display: flex; align-items: center; gap: 10px; }
   .dot-swatch {
@@ -388,9 +376,6 @@
   <div class="lang-btn"        id="btn-lang-nl" onclick="setLang('nl')">🇳🇱 NL</div>
 </div>
 
-<!-- ══════════════════════════════════════════
-     KOMPAS SCHERM
-══════════════════════════════════════════ -->
 <div class="screen active" id="screen-compass">
 
   <div class="top-bar">
@@ -405,86 +390,85 @@
     <div class="compass-rim"></div>
     <div class="degree-ring"><svg id="ring-svg" viewBox="0 0 400 400"></svg></div>
 
-    <!-- Kardinale punten op de buitenste ring — draaien NIET mee -->
+    <!-- Kardinale punten — VAST, N altijd boven -->
     <div class="cardinal" style="top:8%;left:50%">N</div>
     <div class="cardinal" style="top:92%;left:50%">S</div>
     <div class="cardinal" style="top:50%;left:93%">E</div>
     <div class="cardinal" style="top:50%;left:7%">O</div>
 
-    <!-- Stippen op de ring — draaien NIET mee, worden via JS geplaatst -->
+    <!-- Stippen op ring — heading-up via JS -->
     <div class="ring-dot" id="dot-home" style="color:var(--gold-home);background:var(--gold-home)"></div>
     <div class="ring-dot" id="dot-vac"  style="color:var(--green-vac);background:var(--green-vac)"></div>
     <div class="ring-dot" id="dot-dest" style="color:var(--red-dest);background:var(--red-dest)"></div>
     <div class="ring-dot" id="dot-pers" style="color:var(--orange-pers);background:var(--orange-pers)"></div>
 
-    <!-- 
-      FIX #2: map-viewport bevat map-rotating.
-      map-rotating draait als geheel (kaart + windroos erin).
-      Zo draait windroos altijd MEE met de kaart.
+    <!--
+      NORTH-UP: map-viewport bevat kaart + windroze VAST.
+      Geen map-rotating wrapper. Kaart draait NOOIT.
+      Windroze N staat altijd boven.
     -->
     <div class="map-viewport" id="map-viewport">
-      <div id="map-rotating">
-        <div id="map"></div>
+      <div id="map"></div>
 
-        <!-- Windroosoverlay — zit IN map-rotating → draait MEE met kaart -->
-        <svg id="windrose-svg" viewBox="0 0 300 300"
-          style="position:absolute;inset:0;width:100%;height:100%;z-index:7;pointer-events:none">
-          <defs>
-            <filter id="wr-glow" x="-40%" y="-40%" width="180%" height="180%">
-              <feGaussianBlur stdDeviation="1.2" result="b"/>
-              <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
-            </filter>
-          </defs>
-          <circle cx="150" cy="150" r="132" fill="none" stroke="rgba(160,110,20,0.18)" stroke-width="0.8"/>
-          <!-- NOORD — rood accent -->
-          <polygon points="150,18  154,108 150,122 146,108" fill="rgba(160,40,30,0.38)" filter="url(#wr-glow)"/>
-          <polygon points="150,18  152,60  150,72  148,60"  fill="rgba(200,60,40,0.55)" filter="url(#wr-glow)"/>
-          <!-- ZUID -->
-          <polygon points="150,282 154,192 150,178 146,192" fill="rgba(130,95,20,0.28)"/>
-          <polygon points="150,282 152,240 150,228 148,240" fill="rgba(150,110,25,0.35)"/>
-          <!-- OOST -->
-          <polygon points="282,150 192,154 178,150 192,146" fill="rgba(130,95,20,0.28)"/>
-          <polygon points="282,150 240,152 228,150 240,148" fill="rgba(150,110,25,0.35)"/>
-          <!-- WEST -->
-          <polygon points="18,150  108,154 122,150 108,146" fill="rgba(130,95,20,0.28)"/>
-          <polygon points="18,150  60,152  72,150  60,148"  fill="rgba(150,110,25,0.35)"/>
-          <!-- Tussenrichtingen -->
-          <polygon points="243,57  196,118 188,110 196,102" fill="rgba(130,95,20,0.20)"/>
-          <polygon points="243,243 196,182 188,190 196,198" fill="rgba(130,95,20,0.18)"/>
-          <polygon points="57,243  104,182 112,190 104,198" fill="rgba(130,95,20,0.18)"/>
-          <polygon points="57,57   104,118 112,110 104,102" fill="rgba(130,95,20,0.20)"/>
-          <!-- Labels -->
-          <text x="150" y="16" text-anchor="middle" font-family="Cinzel,serif" font-size="15" font-weight="700"
-            fill="rgba(200,55,40,0.72)" filter="url(#wr-glow)">N</text>
-          <text x="150" y="296" text-anchor="middle" font-family="Cinzel,serif" font-size="12" font-weight="700"
-            fill="rgba(180,130,30,0.42)">S</text>
-          <text x="290" y="155" text-anchor="middle" font-family="Cinzel,serif" font-size="12" font-weight="700"
-            fill="rgba(180,130,30,0.42)">E</text>
-          <text x="10" y="155" text-anchor="middle" font-family="Cinzel,serif" font-size="12" font-weight="700"
-            fill="rgba(180,130,30,0.42)">O</text>
-          <!-- Centrale decoratieve cirkel -->
-          <circle cx="150" cy="150" r="28" fill="none" stroke="rgba(150,105,20,0.22)" stroke-width="1"/>
-          <circle cx="150" cy="150" r="5" fill="rgba(190,140,30,0.45)" stroke="rgba(100,70,10,0.35)" stroke-width="1"/>
-          <circle cx="150" cy="150" r="2" fill="rgba(220,170,50,0.60)"/>
-        </svg>
+      <!-- Windroze VAST op kaart — N altijd boven -->
+      <svg id="windrose-svg" viewBox="0 0 300 300">
+        <defs>
+          <filter id="wr-glow" x="-40%" y="-40%" width="180%" height="180%">
+            <feGaussianBlur stdDeviation="1.2" result="b"/>
+            <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+        </defs>
+        <circle cx="150" cy="150" r="132" fill="none" stroke="rgba(160,110,20,0.18)" stroke-width="0.8"/>
+        <!-- NOORD — rood, altijd boven -->
+        <polygon points="150,18  154,108 150,122 146,108" fill="rgba(160,40,30,0.38)" filter="url(#wr-glow)"/>
+        <polygon points="150,18  152,60  150,72  148,60"  fill="rgba(200,60,40,0.55)" filter="url(#wr-glow)"/>
+        <!-- ZUID -->
+        <polygon points="150,282 154,192 150,178 146,192" fill="rgba(130,95,20,0.28)"/>
+        <polygon points="150,282 152,240 150,228 148,240" fill="rgba(150,110,25,0.35)"/>
+        <!-- OOST -->
+        <polygon points="282,150 192,154 178,150 192,146" fill="rgba(130,95,20,0.28)"/>
+        <polygon points="282,150 240,152 228,150 240,148" fill="rgba(150,110,25,0.35)"/>
+        <!-- WEST -->
+        <polygon points="18,150  108,154 122,150 108,146" fill="rgba(130,95,20,0.28)"/>
+        <polygon points="18,150  60,152  72,150  60,148"  fill="rgba(150,110,25,0.35)"/>
+        <!-- Tussenrichtingen -->
+        <polygon points="243,57  196,118 188,110 196,102" fill="rgba(130,95,20,0.20)"/>
+        <polygon points="243,243 196,182 188,190 196,198" fill="rgba(130,95,20,0.18)"/>
+        <polygon points="57,243  104,182 112,190 104,198" fill="rgba(130,95,20,0.18)"/>
+        <polygon points="57,57   104,118 112,110 104,102" fill="rgba(130,95,20,0.20)"/>
+        <!-- Labels -->
+        <text x="150" y="16" text-anchor="middle" font-family="Cinzel,serif" font-size="15" font-weight="700"
+          fill="rgba(200,55,40,0.72)" filter="url(#wr-glow)">N</text>
+        <text x="150" y="296" text-anchor="middle" font-family="Cinzel,serif" font-size="12" font-weight="700"
+          fill="rgba(180,130,30,0.42)">S</text>
+        <text x="290" y="155" text-anchor="middle" font-family="Cinzel,serif" font-size="12" font-weight="700"
+          fill="rgba(180,130,30,0.42)">E</text>
+        <text x="10" y="155" text-anchor="middle" font-family="Cinzel,serif" font-size="12" font-weight="700"
+          fill="rgba(180,130,30,0.42)">O</text>
+        <circle cx="150" cy="150" r="28" fill="none" stroke="rgba(150,105,20,0.22)" stroke-width="1"/>
+        <circle cx="150" cy="150" r="5" fill="rgba(190,140,30,0.45)" stroke="rgba(100,70,10,0.35)" stroke-width="1"/>
+        <circle cx="150" cy="150" r="2" fill="rgba(220,170,50,0.60)"/>
+      </svg>
 
-        <div class="map-overlay"></div>
-        <div class="cache-progress" id="cache-progress">
-          <div class="cache-progress-bar" id="cache-progress-bar"></div>
-        </div>
+      <div class="map-overlay"></div>
+      <div class="cache-progress" id="cache-progress">
+        <div class="cache-progress-bar" id="cache-progress-bar"></div>
       </div>
     </div>
 
-    <!-- Jij-stip staat BUITEN map-rotating → blijft altijd in het midden, draait niet -->
+    <!-- Jij-stip BUITEN map-viewport — statisch middelpunt -->
     <div class="you-dot" id="you-dot"></div>
 
     <div class="map-toggle" id="map-toggle" onclick="toggleMap()">🗺</div>
     <div class="cache-btn" id="cache-btn" onclick="startCacheTiles()" title="Download kaart voor offline gebruik">⬇️</div>
 
-    <!-- 
-      Naald staat BUITEN map-rotating.
-      FIX #3: naald toont richting naar bestemming RELATIEF aan jouw heading.
-      Als jij precies de goede kant opgaat → naald wijst recht omhoog (0°).
+    <!--
+      RODE NAALD — ENIGE element dat draait.
+      needleAngle = bearingToTarget - currentHeading
+        0°  → omhoog  → je loopt de goede kant op ✅
+        90° → rechts  → rechts afslaan
+       180° → omlaag  → verkeerde richting
+       270° → links   → links afslaan
     -->
     <div id="needle-layer">
       <svg id="needle-svg" viewBox="0 0 200 200">
@@ -506,7 +490,6 @@
     <div class="center-pin"></div>
   </div>
 
-  <!-- Info panel -->
   <div class="info-panel">
     <div class="status-row">
       <span id="status-koers">—</span>
@@ -519,9 +502,7 @@
     <div id="debug-row"></div>
   </div>
 
-  <!-- Waypoints -->
   <div class="waypoints">
-
     <div class="target-selector">
       <div class="target-btn home-t active" id="btn-t-home" onclick="setActiveTarget('home')">🏠 <span class="t" data-it="CASA" data-nl="THUIS">CASA</span></div>
       <div class="target-btn vac-t"         id="btn-t-vac"  onclick="setActiveTarget('vac')">🌿 <span class="t" data-it="VACANZA" data-nl="VAKANTIE">VACANZA</span></div>
@@ -529,7 +510,6 @@
       <div class="target-btn pers-t"        id="btn-t-pers" onclick="setActiveTarget('pers')">🧡 <span class="t" data-it="PERSONA" data-nl="PERSOON">PERSONA</span></div>
     </div>
 
-    <!-- Casa / Thuis -->
     <div class="wp-block home">
       <div class="wp-header"><div class="wp-dot"></div>
         <div class="wp-label t" data-it="INDIRIZZO DI CASA" data-nl="THUIS ADRES">INDIRIZZO DI CASA</div>
@@ -543,7 +523,6 @@
       <div class="wp-dist" id="dist-home"></div>
     </div>
 
-    <!-- Vacanza / Vakantie -->
     <div class="wp-block vac">
       <div class="wp-header"><div class="wp-dot"></div>
         <div class="wp-label t" data-it="VACANZA / TAPPA" data-nl="VAKANTIE / TUSSENSTOP">VACANZA / TAPPA</div>
@@ -556,7 +535,6 @@
       <div class="wp-dist" id="dist-vac"></div>
     </div>
 
-    <!-- Meta / Bestemming -->
     <div class="wp-block dest">
       <div class="wp-header"><div class="wp-dot"></div>
         <div class="wp-label t" data-it="DESTINAZIONE" data-nl="BESTEMMING">DESTINAZIONE</div>
@@ -569,7 +547,6 @@
       <div class="wp-dist" id="dist-dest"></div>
     </div>
 
-    <!-- Persona / Persoon -->
     <div class="wp-block pers">
       <div class="wp-header"><div class="wp-dot"></div>
         <div class="wp-label t" data-it="PERSONA DA RACCOGLIERE" data-nl="OP TE HALEN PERSOON">PERSONA DA RACCOGLIERE</div>
@@ -592,105 +569,69 @@
 </div><!-- /screen-compass -->
 
 
-<!-- ══════════════════════════════════════════
-     HANDLEIDING / MANUALE SCHERM
-══════════════════════════════════════════ -->
 <div class="screen manual-screen" id="screen-manual">
-
   <div class="manual-back" onclick="showScreen('compass')">
     ← <span class="t" data-it="TORNA ALLA BUSSOLA" data-nl="TERUG NAAR KOMPAS">TORNA ALLA BUSSOLA</span>
   </div>
-
   <div class="manual-title t" data-it="📖 MANUALE D'USO" data-nl="📖 GEBRUIKSHANDLEIDING">📖 MANUALE D'USO</div>
 
   <div class="manual-section">
-    <h3>🚀 <span class="it">Avvio rapido</span> <span class="nl">/ Snel starten</span></h3>
-    <p class="it">1. Inserisci i tuoi indirizzi nei quattro campi (Casa, Vacanza, Meta, Persona).</p>
-    <p class="nl">1. Vul je adressen in de vier velden in.</p>
-    <p class="it">2. Tocca <strong>CERCA</strong> per ogni indirizzo.</p>
-    <p class="nl">2. Tik op <strong>ZOEK</strong> voor elk adres.</p>
-    <p class="it">3. Tocca <strong>💾 SALVA</strong> per memorizzare.</p>
-    <p class="nl">3. Tik op <strong>💾 SLA OP</strong> om op te slaan.</p>
-    <p class="it">4. Tocca <strong>▶ ATTIVA BUSSOLA</strong> per avviare GPS e bussola.</p>
-    <p class="nl">4. Tik op <strong>▶ KOMPAS ACTIVEREN</strong> om GPS en kompas te starten.</p>
+    <h3>🚀 <span>Avvio rapido / Snel starten</span></h3>
+    <p>1. IT: Inserisci gli indirizzi e tocca CERCA per ogni campo.</p>
+    <p>1. NL: Vul de adressen in en tik ZOEK voor elk veld.</p>
+    <p>2. IT: Tocca 💾 SALVA, poi ▶ ATTIVA BUSSOLA.</p>
+    <p>2. NL: Tik 💾 SLA OP, dan ▶ KOMPAS ACTIVEREN.</p>
   </div>
 
   <div class="manual-section">
-    <h3>🧭 <span class="it">Come funziona la freccia</span> <span class="nl">/ Hoe de naald werkt</span></h3>
-    <p class="it">La freccia <strong style="color:#cc2222">ROSSA</strong> mostra sempre la direzione verso il bersaglio attivo, <strong>corretta per la tua direzione di marcia</strong>.</p>
-    <p class="nl">De <strong style="color:#cc2222">RODE</strong> punt wijst altijd naar het actieve doel, <strong>gecorrigeerd voor jouw looprichting</strong>.</p>
-    <p class="it" style="margin-top:6px">✅ Freccia <strong>su</strong> (12 ore) = stai andando nella direzione giusta!</p>
-    <p class="nl">✅ Naald <strong>omhoog</strong> (12 uur) = je loopt de goede kant op!</p>
-    <p class="it" style="margin-top:4px">↩ Freccia a sinistra = devi girare a sinistra.</p>
-    <p class="nl">↩ Naald links = je moet links afslaan.</p>
-    <p class="it" style="margin-top:4px">↪ Freccia a destra = devi girare a destra.</p>
-    <p class="nl">↪ Naald rechts = je moet rechts afslaan.</p>
+    <h3>🧭 Come funziona / Hoe het werkt</h3>
+    <p>IT: La <strong style="color:#cc2222">freccia ROSSA</strong> ruota e indica sempre la direzione verso il bersaglio attivo, corretta per la tua direzione di marcia.</p>
+    <p>NL: De <strong style="color:#cc2222">RODE naald</strong> draait en wijst naar het actieve doel, gecorrigeerd voor jouw looprichting.</p>
+    <p style="margin-top:6px">✅ Freccia/Naald <strong>su/omhoog</strong> = richting juist!</p>
+    <p>↪ Freccia destra / Naald rechts = rechts afslaan</p>
+    <p>↩ Freccia sinistra / Naald links = links afslaan</p>
+    <p style="margin-top:6px">🗺 IT: La mappa è orientata a <strong>nord fisso</strong>. Solo la freccia ruota.</p>
+    <p>🗺 NL: De kaart staat op <strong>vast noorden</strong>. Alleen de naald draait.</p>
   </div>
 
   <div class="manual-section">
-    <h3>🔵 <span class="it">I punti sulla bussola</span> <span class="nl">/ De stippen</span></h3>
+    <h3>🔵 Punti / Stippen</h3>
     <div class="dot-legend">
       <div class="dot-row">
         <div class="dot-swatch" style="background:var(--blue-you);box-shadow:0 0 8px var(--blue-you)"></div>
-        <div class="dot-txt">
-          <span class="it">🔵 BLU — Sei tu! Sempre al centro.</span>
-          <span class="nl">Blauw — Dat ben jij! Altijd in het midden.</span>
-        </div>
+        <div class="dot-txt"><span class="it">🔵 BLU/Blauw — Sei tu / Dat ben jij. Altijd midden.</span></div>
       </div>
       <div class="dot-row">
         <div class="dot-swatch" style="background:var(--gold-home)"></div>
-        <div class="dot-txt">
-          <span class="it">🟡 ORO — Casa. Sul cerchio indica la direzione verso casa.</span>
-          <span class="nl">Goud — Thuis. Op de ring, richting naar huis.</span>
-        </div>
+        <div class="dot-txt"><span class="it">🟡 ORO/Goud — Casa / Thuis</span></div>
       </div>
       <div class="dot-row">
         <div class="dot-swatch" style="background:var(--green-vac)"></div>
-        <div class="dot-txt">
-          <span class="it">🟢 VERDE — Vacanza/Tappa.</span>
-          <span class="nl">Groen — Vakantie/Tussenstop.</span>
-        </div>
+        <div class="dot-txt"><span class="it">🟢 VERDE/Groen — Vacanza / Vakantie</span></div>
       </div>
       <div class="dot-row">
         <div class="dot-swatch" style="background:var(--red-dest)"></div>
-        <div class="dot-txt">
-          <span class="it">🔴 ROSSO — Destinazione. La freccia punta qui!</span>
-          <span class="nl">Rood — Bestemming. De naald wijst hierheen!</span>
-        </div>
+        <div class="dot-txt"><span class="it">🔴 ROSSO/Rood — Destinazione. La freccia punta qui!</span></div>
       </div>
       <div class="dot-row">
         <div class="dot-swatch" style="background:var(--orange-pers)"></div>
-        <div class="dot-txt">
-          <span class="it">🟠 ARANCIONE — Persona da raccogliere.</span>
-          <span class="nl">Oranje — Op te halen persoon.</span>
-        </div>
+        <div class="dot-txt"><span class="it">🟠 ARANCIONE/Oranje — Persona / Persoon</span></div>
       </div>
     </div>
-    <p class="it" style="margin-top:8px">I punti si trovano sul cerchio esterno e mostrano la direzione di ogni waypoint, <strong>tenendo conto della tua direzione di marcia</strong> (heading-up).</p>
-    <p class="nl" style="margin-top:4px">De stippen tonen de richting van elk waypoint, <strong>rekening houdend met jouw looprichting</strong> (heading-up).</p>
+    <p style="margin-top:8px">IT/NL: I punti sul cerchio / De stippen op de ring tonen de richting t.o.v. jouw looprichting (heading-up).</p>
   </div>
 
   <div class="manual-section">
-    <h3>🗺 <span class="it">La mappa</span> <span class="nl">/ De kaart</span></h3>
-    <p class="it">La mappa ruota con te — "davanti a te" è sempre in alto. Il simbolo <strong>N</strong> sulla mappa indica il vero nord, ruotando insieme.</p>
-    <p class="nl">De kaart draait met je mee — "voor je uit" staat altijd bovenaan. Het <strong>N</strong>-symbool op de kaart toont het echte noorden, dat meedraait.</p>
-    <p class="it" style="margin-top:5px">💡 <em>Offline:</em> premi <strong>⬇️</strong> a casa con WiFi per scaricare le tessere.</p>
-    <p class="nl" style="margin-top:2px">💡 <em>Offline:</em> druk thuis op <strong>⬇️</strong> met wifi voor tegels.</p>
-  </div>
-
-  <div class="manual-section">
-    <h3>⚠️ <span class="it">Precisione indirizzi</span> <span class="nl">/ Adresnauwkeurigheid</span></h3>
-    <p class="it">Se la distanza sembra sbagliata: controlla il nome della città nel campo. Nominatim (OpenStreetMap) può trovare una città omonima in un altro paese.</p>
-    <p class="nl">Als de afstand verkeerd lijkt: controleer de stad in het veld. Nominatim (OpenStreetMap) kan een gelijknamige stad in een ander land vinden.</p>
-    <p class="it" style="margin-top:5px">💡 Aggiungi il paese o il CAP: <em>Schoolstraat 49, Heeze, Nederland</em></p>
-    <p class="nl" style="margin-top:2px">💡 Voeg land of postcode toe: <em>Schoolstraat 49, Heeze, Nederland</em></p>
+    <h3>⚠️ Precisione / Nauwkeurigheid</h3>
+    <p>IT: Se la distanza sembra sbagliata, aggiungi il paese: <em>Heeze, Nederland</em></p>
+    <p>NL: Voeg land of postcode toe: <em>Heeze, Nederland</em></p>
+    <p style="margin-top:5px">💡 Offline: ⬇️ thuis met wifi downloaden.</p>
   </div>
 
   <div class="manual-back" onclick="showScreen('compass')" style="margin-top:8px;align-self:center">
     ← <span class="t" data-it="TORNA ALLA BUSSOLA" data-nl="TERUG NAAR KOMPAS">TORNA ALLA BUSSOLA</span>
   </div>
-
-</div><!-- /screen-manual -->
+</div>
 
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -704,45 +645,41 @@ let LANG = localStorage.getItem('kompas_lang') || 'it';
 
 const T = {
   it: {
-    course:  'Rotta',
-    acc:     'Precisione',
-    gps:     'GPS',
-    toLbl:   { home:'verso casa', vac:'verso la tappa', dest:'verso la destinazione', pers:'verso la persona' },
+    course:'Rotta', acc:'Precisione', gps:'GPS',
+    toLbl:{ home:'verso casa', vac:'verso la tappa', dest:'verso la destinazione', pers:'verso la persona' },
     cardinal:['Nord','Nord-Nord-Est','Nord-Est','Est-Nord-Est','Est','Est-Sud-Est','Sud-Est','Sud-Sud-Est',
               'Sud','Sud-Sud-Ovest','Sud-Ovest','Ovest-Sud-Ovest','Ovest','Ovest-Nord-Ovest','Nord-Ovest','Nord-Nord-Ovest'],
-    mapOn:   '🗺 MAPPA', mapOff:'🗺 OFF',
-    saved:   'Salvato ✓', found:'✓ Trovato',
-    noAddr:  'Indirizzo non trovato. Prova con città e paese (es. Heeze, Nederland).',
-    noNet:   'Nessuna connessione. Digita: lat,lon (es. 52.37,4.89)',
-    coordOk: 'Coordinate impostate.',
-    noGps:   'GPS non ancora attivo. Prima attiva la bussola.',
-    posSet:  'Posizione corrente impostata.',
+    mapOn:'🗺 MAPPA', mapOff:'🗺 OFF',
+    saved:'Salvato ✓', found:'✓ Trovato',
+    noAddr:'Indirizzo non trovato. Prova con città e paese (es. Heeze, Nederland).',
+    noNet:'Nessuna connessione. Digita: lat,lon (es. 52.37,4.89)',
+    coordOk:'Coordinate impostate.',
+    noGps:'GPS non ancora attivo. Prima attiva la bussola.',
+    posSet:'Posizione corrente impostata.',
     enterAddr:'Inserisci un indirizzo.',
-    search:  'Ricerca…',
-    ttsNone: 'Nessun dato disponibile. Attivare prima la bussola.',
-    ttsText: (card,deg,dist,unit) => `Mantieni ${card}, ${deg} gradi. Distanza: ${dist} ${unit}.`,
+    search:'Ricerca…',
+    ttsNone:'Nessun dato disponibile. Attivare prima la bussola.',
+    ttsText:(card,deg,dist,unit)=>`Mantieni ${card}, ${deg} gradi. Distanza: ${dist} ${unit}.`,
     distUnit:['metro','metri','chilometro','chilometri'],
-    compassTitle: '⚓ BUSSOLA TERRENO ⚓',
+    compassTitle:'⚓ BUSSOLA TERRENO ⚓',
   },
   nl: {
-    course:  'Koers',
-    acc:     'Nauwkeurigheid',
-    gps:     'GPS',
-    toLbl:   { home:'tot thuis', vac:'tot vakantieadres', dest:'tot bestemming', pers:'tot op te halen persoon' },
+    course:'Koers', acc:'Nauwkeurigheid', gps:'GPS',
+    toLbl:{ home:'tot thuis', vac:'tot vakantieadres', dest:'tot bestemming', pers:'tot op te halen persoon' },
     cardinal:['Noord','NNO','NO','ONO','Oost','OZO','ZO','ZZO','Zuid','ZZW','ZW','WZW','West','WNW','NW','NNW'],
-    mapOn:   '🗺 KAART', mapOff:'🗺 UIT',
-    saved:   'Opgeslagen ✓', found:'✓ Gevonden',
-    noAddr:  'Adres niet gevonden. Probeer met stad en land (bijv. Heeze, Nederland).',
-    noNet:   'Geen internet. Typ: lat,lon (bijv. 52.37,4.89)',
-    coordOk: 'Coördinaten ingesteld.',
-    noGps:   'GPS nog niet actief. Druk eerst op Kompas Activeren.',
-    posSet:  'Huidige positie ingesteld.',
+    mapOn:'🗺 KAART', mapOff:'🗺 UIT',
+    saved:'Opgeslagen ✓', found:'✓ Gevonden',
+    noAddr:'Adres niet gevonden. Probeer met stad en land (bijv. Heeze, Nederland).',
+    noNet:'Geen internet. Typ: lat,lon (bijv. 52.37,4.89)',
+    coordOk:'Coördinaten ingesteld.',
+    noGps:'GPS nog niet actief. Druk eerst op Kompas Activeren.',
+    posSet:'Huidige positie ingesteld.',
     enterAddr:'Voer een adres in.',
-    search:  'Zoeken…',
-    ttsNone: 'Geen data beschikbaar. Activeer eerst het kompas.',
-    ttsText: (card,deg,dist,unit) => `Houd ${card} aan, ${deg} graden. Afstand: ${dist} ${unit}.`,
+    search:'Zoeken…',
+    ttsNone:'Geen data beschikbaar. Activeer eerst het kompas.',
+    ttsText:(card,deg,dist,unit)=>`Houd ${card} aan, ${deg} graden. Afstand: ${dist} ${unit}.`,
     distUnit:['meter','meter','kilometer','kilometer'],
-    compassTitle: '⚓ TERREIN KOMPAS ⚓',
+    compassTitle:'⚓ TERREIN KOMPAS ⚓',
   }
 };
 
@@ -756,22 +693,18 @@ function setLang(l) {
 }
 
 function applyLang() {
-  const L = T[LANG];
-  document.querySelectorAll('.t[data-'+LANG+']').forEach(function(el) {
+  document.querySelectorAll('.t[data-'+LANG+']').forEach(function(el){
     el.textContent = el.getAttribute('data-'+LANG);
   });
-  document.querySelectorAll('.wp-input[data-ph-'+LANG+']').forEach(function(el) {
+  document.querySelectorAll('.wp-input[data-ph-'+LANG+']').forEach(function(el){
     el.placeholder = el.getAttribute('data-ph-'+LANG);
   });
-  document.getElementById('app-title').textContent = L.compassTitle;
-  document.getElementById('map-toggle').textContent = S.mapVisible ? L.mapOn : L.mapOff;
+  document.getElementById('app-title').textContent = T[LANG].compassTitle;
+  document.getElementById('map-toggle').textContent = S.mapVisible ? T[LANG].mapOn : T[LANG].mapOff;
 }
 
-// ═══════════════════════════════
-// SCHERM WISSELEN
-// ═══════════════════════════════
 function showScreen(name) {
-  document.querySelectorAll('.screen').forEach(function(s) { s.classList.remove('active'); });
+  document.querySelectorAll('.screen').forEach(function(s){ s.classList.remove('active'); });
   document.getElementById('screen-'+name).classList.add('active');
   window.scrollTo(0,0);
 }
@@ -794,7 +727,7 @@ var S = {
 var WP_COLOR = {home:'#ffd700',vac:'#2ecc71',dest:'#cc2222',pers:'#ff8c00'};
 
 // ═══════════════════════════════
-// LEAFLET
+// LEAFLET — NORTH-UP, kaart beweegt nooit
 // ═══════════════════════════════
 var map, markers = {};
 var MAP_ZOOM = 16;
@@ -802,22 +735,18 @@ var MAP_ZOOM = 16;
 function initMap(lat,lon) {
   if (S.mapReady) return;
   S.mapReady = true;
-
   map = L.map('map', {
     center:[lat,lon], zoom:MAP_ZOOM,
     zoomControl:false, attributionControl:true,
     dragging:false, scrollWheelZoom:false,
     doubleClickZoom:false, touchZoom:false, boxZoom:false, keyboard:false
   });
-
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution:'© OSM', maxZoom:19, minZoom:10, keepBuffer:4
   }).addTo(map);
-
-  [100,300,600,1200].forEach(function(t) {
+  [100,300,600,1200].forEach(function(t){
     setTimeout(function(){ map.invalidateSize({reset:false}); }, t);
   });
-
   ['home','vac','dest','pers'].forEach(function(k){ refreshMarker(k); });
 }
 
@@ -833,8 +762,8 @@ function refreshMarker(k) {
     html:'<div style="width:14px;height:14px;border-radius:50%;background:'+WP_COLOR[k]+';border:2.5px solid #fff;box-shadow:0 0 7px '+WP_COLOR[k]+'"></div>'
   });
   if (markers[k]) markers[k].setLatLng([w.lat,w.lon]).setIcon(icon);
-  else markers[k] = L.marker([w.lat,w.lon], {icon:icon,interactive:false})
-    .bindTooltip(w.name||k, {permanent:false,direction:'top'}).addTo(map);
+  else markers[k] = L.marker([w.lat,w.lon],{icon:icon,interactive:false})
+    .bindTooltip(w.name||k,{permanent:false,direction:'top'}).addTo(map);
 }
 
 function toggleMap() {
@@ -844,38 +773,13 @@ function toggleMap() {
 }
 
 // ═══════════════════════════════
-// FIX #2: KAART + WINDROOS ROTEREN SAMEN
-// map-rotating element bevat BEIDE (kaart en windroos)
-// Smooth animatie via requestAnimationFrame
-// ═══════════════════════════════
-var _targetRot = 0, _currentRot = 0, _rafId = null;
-
-function rotateMap(headingDeg) {
-  // Kaart draait TEGENGESTELD aan heading → "voor je" staat altijd boven
-  _targetRot = -headingDeg;
-  if (!_rafId) _rafId = requestAnimationFrame(_animateMap);
-}
-
-function _animateMap() {
-  _rafId = null;
-  var diff = _targetRot - _currentRot;
-  // Kortste weg
-  while (diff > 180) diff -= 360;
-  while (diff < -180) diff += 360;
-  _currentRot += diff * 0.12;
-  var el = document.getElementById('map-rotating');
-  if (el) el.style.transform = 'rotate(' + _currentRot + 'deg)';
-  if (Math.abs(diff) > 0.05) _rafId = requestAnimationFrame(_animateMap);
-}
-
-// ═══════════════════════════════
 // OFFLINE TILE CACHE
 // ═══════════════════════════════
 function lat2tile(lat,zoom){ return Math.floor((1-Math.log(Math.tan(lat*Math.PI/180)+1/Math.cos(lat*Math.PI/180))/Math.PI)/2*Math.pow(2,zoom)); }
 function lon2tile(lon,zoom){ return Math.floor((lon+180)/360*Math.pow(2,zoom)); }
 
 function countTiles(lat,lon,radiusKm,minZ,maxZ){
-  var total=0, deg=radiusKm/111;
+  var total=0,deg=radiusKm/111;
   for(var z=minZ;z<=maxZ;z++){
     var x0=lon2tile(lon-deg,z),x1=lon2tile(lon+deg,z);
     var y0=lat2tile(lat+deg,z),y1=lat2tile(lat-deg,z);
@@ -918,13 +822,10 @@ async function startCacheTiles(){
   }
   progressEl.style.display='none'; btn.textContent='✅';
   setTimeout(function(){ btn.textContent='⬇️'; },3000);
-  showMsg(LANG==='it'
-    ? 'Salvato! '+(done-failed)+' tessere.'
-    : 'Opgeslagen! '+(done-failed)+' tegels.');
+  showMsg(LANG==='it'?'Salvato! '+(done-failed)+' tessere.':'Opgeslagen! '+(done-failed)+' tegels.');
   setTimeout(function(){ showMsg(''); },4000);
 }
 
-// Service Worker voor tile-caching
 if('serviceWorker' in navigator){
   var swCode="const CACHE='kompas-tiles-v1';\nself.addEventListener('fetch',e=>{\n  if(e.request.url.includes('tile.openstreetmap.org')){\n    e.respondWith(caches.open(CACHE).then(async cache=>{\n      const cached=await cache.match(e.request);\n      if(cached) return cached;\n      try{ const fresh=await fetch(e.request); if(fresh.ok) cache.put(e.request,fresh.clone()); return fresh; }catch{ return cached||new Response('',{status:503}); }\n    }));\n  }\n});";
   var blob=new Blob([swCode],{type:'application/javascript'});
@@ -935,18 +836,18 @@ if('serviceWorker' in navigator){
 // GRADEN RING
 // ═══════════════════════════════
 (function drawRing(){
-  var svg=document.getElementById('ring-svg'), cx=200, cy=200, r=190;
+  var svg=document.getElementById('ring-svg'),cx=200,cy=200,r=190;
   var h='<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="#1e160a" stroke="#4a3605" stroke-width="3"/>';
   for(var deg=0;deg<360;deg++){
     var rad=(deg-90)*Math.PI/180;
-    var maj=deg%10===0, mid=deg%5===0&&!maj;
+    var maj=deg%10===0,mid=deg%5===0&&!maj;
     var len=maj?18:mid?10:5;
     var col=deg%90===0?'#c9972a':maj?'#9a7030':'#5a4020';
-    var x1=cx+(r-4)*Math.cos(rad), y1=cy+(r-4)*Math.sin(rad);
-    var x2=cx+(r-4-len)*Math.cos(rad), y2=cy+(r-4-len)*Math.sin(rad);
+    var x1=cx+(r-4)*Math.cos(rad),y1=cy+(r-4)*Math.sin(rad);
+    var x2=cx+(r-4-len)*Math.cos(rad),y2=cy+(r-4-len)*Math.sin(rad);
     h+='<line x1="'+x1+'" y1="'+y1+'" x2="'+x2+'" y2="'+y2+'" stroke="'+col+'" stroke-width="'+(maj?1.5:.8)+'"/>';
     if(maj&&deg%30===0&&deg%90!==0){
-      var tx=cx+(r-30)*Math.cos(rad), ty=cy+(r-30)*Math.sin(rad);
+      var tx=cx+(r-30)*Math.cos(rad),ty=cy+(r-30)*Math.sin(rad);
       h+='<text x="'+tx+'" y="'+ty+'" text-anchor="middle" dominant-baseline="middle" font-family="Cinzel,serif" font-size="11" fill="#9a7030" transform="rotate('+deg+','+tx+','+ty+')">'+deg+'</text>';
     }
   }
@@ -955,54 +856,31 @@ if('serviceWorker' in navigator){
 })();
 
 // ═══════════════════════════════
-// FIX #1: GEOCODING MET BETERE LANDSPECIFICATIE
-// Voegt countrycode toe aan query voor nauwkeurigere resultaten
-// + toont gevonden coordinaten in debug-rij
+// GEOCODING
 // ═══════════════════════════════
 async function geocodeWaypoint(k){
-  var input = document.getElementById('inp-'+k).value.trim();
+  var input=document.getElementById('inp-'+k).value.trim();
   if(!input){ showMsg(T[LANG].enterAddr); return; }
   showMsg(T[LANG].search);
-
   try{
-    // Stuur accept-language + geen countrycodes beperking zodat handmatig land werkt
-    var url = 'https://nominatim.openstreetmap.org/search?q='
-      + encodeURIComponent(input)
-      + '&format=json&limit=3&addressdetails=1';
-    var resp = await fetch(url, {headers:{'Accept-Language': LANG==='it'?'it':'nl', 'User-Agent':'BussolaTerreno/2.0'}});
-    var data = await resp.json();
-
+    var url='https://nominatim.openstreetmap.org/search?q='+encodeURIComponent(input)+'&format=json&limit=3&addressdetails=1';
+    var resp=await fetch(url,{headers:{'Accept-Language':LANG==='it'?'it':'nl','User-Agent':'BussolaTerreno/2.0'}});
+    var data=await resp.json();
     if(!data.length){ showMsg(T[LANG].noAddr); return; }
-
-    // Neem eerste resultaat
-    var r = data[0];
-    var lat = parseFloat(r.lat);
-    var lon = parseFloat(r.lon);
-
-    // Sanity check: coördinaten moeten geldig zijn
-    if(isNaN(lat)||isNaN(lon)||lat<-90||lat>90||lon<-180||lon>180){
-      showMsg(T[LANG].noAddr); return;
-    }
-
-    S.waypoints[k] = {
-      lat: lat, lon: lon,
-      name: r.display_name.split(',').slice(0,3).join(',')
-    };
-    document.getElementById('inp-'+k).value = S.waypoints[k].name;
-
-    // FIX #1b: toon gevonden coördinaten als debug-info
-    showDebug('Found '+k+': '+lat.toFixed(5)+','+lon.toFixed(5)+' — '+r.display_name.split(',').slice(0,2).join(','));
-
+    var r=data[0];
+    var lat=parseFloat(r.lat),lon=parseFloat(r.lon);
+    if(isNaN(lat)||isNaN(lon)||lat<-90||lat>90||lon<-180||lon>180){ showMsg(T[LANG].noAddr); return; }
+    S.waypoints[k]={lat:lat,lon:lon,name:r.display_name.split(',').slice(0,3).join(',')};
+    document.getElementById('inp-'+k).value=S.waypoints[k].name;
+    showDebug('Found '+k+': '+lat.toFixed(5)+','+lon.toFixed(5));
     refreshMarker(k);
     showMsg(T[LANG].found);
-    setTimeout(function(){ showMsg(''); }, 2000);
+    setTimeout(function(){ showMsg(''); },2000);
     updateAll();
-
   }catch(e){
-    // Fallback: handmatige coördinaten lat,lon
-    var pts = input.split(',').map(function(s){ return parseFloat(s.trim()); });
-    if(pts.length===2 && !isNaN(pts[0]) && !isNaN(pts[1])){
-      S.waypoints[k] = {lat:pts[0], lon:pts[1], name:input};
+    var pts=input.split(',').map(function(s){ return parseFloat(s.trim()); });
+    if(pts.length===2&&!isNaN(pts[0])&&!isNaN(pts[1])){
+      S.waypoints[k]={lat:pts[0],lon:pts[1],name:input};
       refreshMarker(k);
       showMsg(T[LANG].coordOk);
       updateAll();
@@ -1013,15 +891,15 @@ async function geocodeWaypoint(k){
 }
 
 ['home','vac','dest','pers'].forEach(function(k){
-  document.getElementById('inp-'+k).addEventListener('keydown', function(e){
+  document.getElementById('inp-'+k).addEventListener('keydown',function(e){
     if(e.key==='Enter') geocodeWaypoint(k);
   });
 });
 
 function useCurrentLocation(k){
   if(!S.lat){ showMsg(T[LANG].noGps); return; }
-  S.waypoints[k] = {lat:S.lat, lon:S.lon, name:'📍'};
-  document.getElementById('inp-'+k).value = '📍';
+  S.waypoints[k]={lat:S.lat,lon:S.lon,name:'📍'};
+  document.getElementById('inp-'+k).value='📍';
   refreshMarker(k);
   showMsg(T[LANG].posSet);
   updateAll();
@@ -1030,12 +908,12 @@ function useCurrentLocation(k){
 // ═══════════════════════════════
 // ACTIVE TARGET
 // ═══════════════════════════════
-function setActiveTarget(k, save){
+function setActiveTarget(k,save){
   if(save===undefined) save=true;
-  S.activeTarget = k;
+  S.activeTarget=k;
   ['home','vac','dest','pers'].forEach(function(j){
-    document.getElementById('btn-t-'+j).classList.toggle('active', j===k);
-    document.getElementById('dot-'+j).classList.toggle('active-dot', j===k);
+    document.getElementById('btn-t-'+j).classList.toggle('active',j===k);
+    document.getElementById('dot-'+j).classList.toggle('active-dot',j===k);
   });
   if(save) saveWaypoints();
   updateAll();
@@ -1045,23 +923,23 @@ function setActiveTarget(k, save){
 // OPSLAAN / LADEN
 // ═══════════════════════════════
 function saveWaypoints(){
-  localStorage.setItem('kompas4', JSON.stringify({wp:S.waypoints, at:S.activeTarget}));
+  localStorage.setItem('kompas4',JSON.stringify({wp:S.waypoints,at:S.activeTarget}));
   showMsg(T[LANG].saved);
-  setTimeout(function(){ showMsg(''); }, 2000);
+  setTimeout(function(){ showMsg(''); },2000);
 }
 
 (function load(){
   try{
-    var d = JSON.parse(localStorage.getItem('kompas4') || '{}');
+    var d=JSON.parse(localStorage.getItem('kompas4')||'{}');
     if(d.wp){
       ['home','vac','dest','pers'].forEach(function(k){
-        if(d.wp[k] && d.wp[k].lat){
-          S.waypoints[k] = d.wp[k];
-          document.getElementById('inp-'+k).value = d.wp[k].name || '';
+        if(d.wp[k]&&d.wp[k].lat){
+          S.waypoints[k]=d.wp[k];
+          document.getElementById('inp-'+k).value=d.wp[k].name||'';
         }
       });
     }
-    if(d.at) setActiveTarget(d.at, false);
+    if(d.at) setActiveTarget(d.at,false);
   }catch(e){}
 })();
 
@@ -1072,25 +950,25 @@ function startGPS(){
   if(!navigator.geolocation){ showMsg('GPS non disponibile.'); return; }
   navigator.geolocation.watchPosition(
     function(pos){
-      var first = S.lat === null;
-      S.lat = pos.coords.latitude;
-      S.lon = pos.coords.longitude;
-      S.accuracy = Math.round(pos.coords.accuracy);
-      document.getElementById('status-gps').textContent = T[LANG].gps+': ✓';
-      document.getElementById('status-nauwk').textContent = '±'+S.accuracy+'m';
+      var first=S.lat===null;
+      S.lat=pos.coords.latitude;
+      S.lon=pos.coords.longitude;
+      S.accuracy=Math.round(pos.coords.accuracy);
+      document.getElementById('status-gps').textContent=T[LANG].gps+': ✓';
+      document.getElementById('status-nauwk').textContent='±'+S.accuracy+'m';
       if(first){
-        initMap(S.lat, S.lon);
+        initMap(S.lat,S.lon);
         ['home','vac','dest','pers'].forEach(function(k){ refreshMarker(k); });
       } else if(map){
-        map.setView([S.lat,S.lon], MAP_ZOOM, {animate:false});
+        map.setView([S.lat,S.lon],MAP_ZOOM,{animate:false});
       }
       updateAll();
     },
     function(err){
-      document.getElementById('status-gps').textContent = T[LANG].gps+': ✗';
+      document.getElementById('status-gps').textContent=T[LANG].gps+': ✗';
       showMsg('GPS: '+err.message);
     },
-    {enableHighAccuracy:true, maximumAge:2000, timeout:20000}
+    {enableHighAccuracy:true,maximumAge:2000,timeout:20000}
   );
 }
 
@@ -1099,7 +977,7 @@ function startGPS(){
 // ═══════════════════════════════
 function startCompass(){
   startGPS();
-  if(typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function'){
+  if(typeof DeviceOrientationEvent!=='undefined'&&typeof DeviceOrientationEvent.requestPermission==='function'){
     DeviceOrientationEvent.requestPermission()
       .then(function(r){
         if(r==='granted') listenOri();
@@ -1112,231 +990,208 @@ function startCompass(){
 }
 
 function listenOri(){
-  window.addEventListener('deviceorientationabsolute', onOri, true);
-  window.addEventListener('deviceorientation', onOri, true);
+  window.addEventListener('deviceorientationabsolute',onOri,true);
+  window.addEventListener('deviceorientation',onOri,true);
 }
 
-var _lastHeading = null;
+var _lastHeading=null;
 
 function onOri(e){
-  var h = null;
-  if(e.webkitCompassHeading != null) h = e.webkitCompassHeading;
-  else if(e.absolute && e.alpha != null) h = (360 - e.alpha) % 360;
-  else if(e.alpha != null) h = (360 - e.alpha) % 360;
-  if(h === null) return;
-
-  // Smoothing
-  if(_lastHeading !== null){
-    var d = h - _lastHeading;
-    if(d > 180) d -= 360;
-    if(d < -180) d += 360;
-    h = _lastHeading + d * 0.25;
+  var h=null;
+  if(e.webkitCompassHeading!=null) h=e.webkitCompassHeading;
+  else if(e.absolute&&e.alpha!=null) h=(360-e.alpha)%360;
+  else if(e.alpha!=null) h=(360-e.alpha)%360;
+  if(h===null) return;
+  if(_lastHeading!==null){
+    var d=h-_lastHeading;
+    if(d>180) d-=360;
+    if(d<-180) d+=360;
+    h=_lastHeading+d*0.25;
   }
-  _lastHeading = h;
-  S.heading = h;
-
-  var L = T[LANG];
-  document.getElementById('status-koers').textContent = L.course+': '+Math.round(h)+'°';
-  document.getElementById('heading-display').textContent = toCard(h)+' — '+Math.round(h)+'°';
-
-  // Kaart + windroos draaien mee (FIX #2)
-  rotateMap(h);
+  _lastHeading=h;
+  S.heading=h;
+  document.getElementById('status-koers').textContent=T[LANG].course+': '+Math.round(h)+'°';
+  document.getElementById('heading-display').textContent=toCard(h)+' — '+Math.round(h)+'°';
+  // NORTH-UP: kaart draait NIET. Geen rotateMap() aanroep.
   updateAll();
 }
 
 function toCard(d){
-  return T[LANG].cardinal[Math.round(d/22.5) % 16];
+  return T[LANG].cardinal[Math.round(d/22.5)%16];
 }
 
 // ═══════════════════════════════
-// BEREKENINGEN (haversine + bearing)
+// BEREKENINGEN
 // ═══════════════════════════════
 function hav(la1,lo1,la2,lo2){
-  var R=6371,
-      dL=(la2-la1)*Math.PI/180,
-      dO=(lo2-lo1)*Math.PI/180;
-  var a = Math.sin(dL/2)*Math.sin(dL/2)
-        + Math.cos(la1*Math.PI/180)*Math.cos(la2*Math.PI/180)
-        * Math.sin(dO/2)*Math.sin(dO/2);
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  var R=6371,dL=(la2-la1)*Math.PI/180,dO=(lo2-lo1)*Math.PI/180;
+  var a=Math.sin(dL/2)*Math.sin(dL/2)+Math.cos(la1*Math.PI/180)*Math.cos(la2*Math.PI/180)*Math.sin(dO/2)*Math.sin(dO/2);
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
 }
 
 function brg(la1,lo1,la2,lo2){
-  var dO = (lo2-lo1)*Math.PI/180;
-  var y = Math.sin(dO)*Math.cos(la2*Math.PI/180);
-  var x = Math.cos(la1*Math.PI/180)*Math.sin(la2*Math.PI/180)
-        - Math.sin(la1*Math.PI/180)*Math.cos(la2*Math.PI/180)*Math.cos(dO);
-  return (Math.atan2(y,x)*180/Math.PI + 360) % 360;
+  var dO=(lo2-lo1)*Math.PI/180;
+  var y=Math.sin(dO)*Math.cos(la2*Math.PI/180);
+  var x=Math.cos(la1*Math.PI/180)*Math.sin(la2*Math.PI/180)-Math.sin(la1*Math.PI/180)*Math.cos(la2*Math.PI/180)*Math.cos(dO);
+  return(Math.atan2(y,x)*180/Math.PI+360)%360;
 }
 
 // ═══════════════════════════════
-// FIX #3 + #4: UPDATE — naald en stippen heading-gecorrigeerd
+// UPDATE — NORTH-UP
 //
-// Naald (FIX #3):
+// Kaart:     VAST, N altijd boven
+// Windroze:  VAST op kaart, N altijd boven
+//
+// Rode naald (ENIGE die draait):
 //   needleAngle = bearingToTarget - currentHeading
-//   Als needleAngle = 0 → naald omhoog → je loopt exact de goede kant op
-//   Als needleAngle = 90 → target is rechts van je → rechts afslaan
+//   0°  → naald omhoog  → goede richting ✅
+//   90° → naald rechts  → rechts afslaan
+//  180° → naald omlaag  → verkeerde richting
+//  270° → naald links   → links afslaan
 //
-// Stippen op ring (FIX #4):
+// Stippen op buitenring (heading-up):
 //   ringAngle = bearingToWaypoint - currentHeading
-//   Stip staat op de ring op de hoek van het waypoint VANUIT jouw perspectief
-//   Heading-up: recht voor = boven (0°), rechts = 90°, achter = 180°, links = 270°
-//
-// FIX #1: Afstand wordt kleiner naarmate je nadert (dit werkt al correct;
-//         de bug zat in geocoding van het verkeerde adres)
+//   0°  → waypoint recht voor je → stip boven op ring
+//   90° → waypoint rechts        → stip rechts op ring
 // ═══════════════════════════════
 function updateAll(){
   if(!S.lat) return;
-  var L = T[LANG];
-  var w = S.waypoints;
+  var L=T[LANG],w=S.waypoints;
 
-  // Afstanden in de waypoint-blokken (FIX #1: toont vermindering live)
+  // Afstanden per waypoint
   ['home','vac','dest','pers'].forEach(function(k){
-    var el = document.getElementById('dist-'+k);
-    if(w[k].lat !== null){
-      var d = hav(S.lat,S.lon, w[k].lat,w[k].lon);
-      el.textContent = d < 1
-        ? Math.round(d*1000)+' m'
-        : d.toFixed(2)+' km';
+    var el=document.getElementById('dist-'+k);
+    if(w[k].lat!==null){
+      var d=hav(S.lat,S.lon,w[k].lat,w[k].lon);
+      el.textContent=d<1?Math.round(d*1000)+' m':d.toFixed(2)+' km';
     } else {
-      el.textContent = '';
+      el.textContent='';
     }
   });
 
-  // FIX #4: Stippen op ring — heading-up gecorrigeerd
-  // Als heading onbekend: toon absolute bearing (north-up)
-  var headingForRing = S.heading !== null ? S.heading : 0;
+  // Stippen op buitenring — heading-up
+  var headingForRing=S.heading!==null?S.heading:0;
   ['home','vac','dest','pers'].forEach(function(k){
-    var dot = document.getElementById('dot-'+k);
-    if(w[k].lat !== null){
-      var absoluteBearing = brg(S.lat,S.lon, w[k].lat,w[k].lon);
-      // Relatieve richting t.o.v. jouw looprichting
-      var relativeBearing = (absoluteBearing - headingForRing + 360) % 360;
-      placeDot(dot, relativeBearing);
-      dot.style.display = 'block';
+    var dot=document.getElementById('dot-'+k);
+    if(w[k].lat!==null){
+      var absBrg=brg(S.lat,S.lon,w[k].lat,w[k].lon);
+      var relBrg=(absBrg-headingForRing+360)%360;
+      placeDot(dot,relBrg);
+      dot.style.display='block';
     } else {
-      dot.style.display = 'none';
+      dot.style.display='none';
     }
   });
 
-  // Actief doel: hoofdafstand + FIX #3 naald
-  var a = w[S.activeTarget];
-  if(a.lat !== null){
-    var absBearing = brg(S.lat,S.lon, a.lat,a.lon);
-    var d = hav(S.lat,S.lon, a.lat,a.lon);
+  // Actief doel: afstand + RODE NAALD draait
+  var a=w[S.activeTarget];
+  if(a.lat!==null){
+    var absBearing=brg(S.lat,S.lon,a.lat,a.lon);
+    var d=hav(S.lat,S.lon,a.lat,a.lon);
 
-    // FIX #3: naald = relatieve hoek (bearing - heading)
-    // heading null → toon absolute bearing (north-up, minder nuttig maar veilig)
+    // Naald: relatieve hoek t.o.v. jouw looprichting
     var needleAngle;
-    if(S.heading !== null){
-      needleAngle = (absBearing - S.heading + 360) % 360;
+    if(S.heading!==null){
+      needleAngle=(absBearing-S.heading+360)%360;
     } else {
-      needleAngle = absBearing; // north-up fallback
+      needleAngle=absBearing; // north-up fallback als geen heading
     }
-    document.getElementById('needle-svg').style.transform = 'rotate('+needleAngle+'deg)';
+    document.getElementById('needle-svg').style.transform='rotate('+needleAngle+'deg)';
 
-    // FIX #1: afstand vermindert live naarmate je nadert
-    document.getElementById('dist-main').textContent = d < 1
-      ? Math.round(d*1000)+' m'
-      : d.toFixed(2)+' km';
-    document.getElementById('dist-label').textContent =
-      L.toLbl[S.activeTarget]+' (hemelsbreed)';
+    document.getElementById('dist-main').textContent=d<1?Math.round(d*1000)+' m':d.toFixed(2)+' km';
+    document.getElementById('dist-label').textContent=L.toLbl[S.activeTarget]+' (hemelsbreed)';
   }
 }
 
-// Plaats stip op de kompasring op basis van relatieve hoek
-function placeDot(el, angleDeg){
-  var c = document.getElementById('compass');
-  var sz = c.offsetWidth, ctr = sz/2;
-  // Ring-radius: 41.5% van kompas-diameter (zelfde als degree-ring)
-  var r = sz * 0.415;
-  var rad = (angleDeg - 90) * Math.PI / 180;
-  el.style.left = (ctr + r * Math.cos(rad)) + 'px';
-  el.style.top  = (ctr + r * Math.sin(rad)) + 'px';
+function placeDot(el,angleDeg){
+  var c=document.getElementById('compass');
+  var sz=c.offsetWidth,ctr=sz/2;
+  var r=sz*0.415;
+  var rad=(angleDeg-90)*Math.PI/180;
+  el.style.left=(ctr+r*Math.cos(rad))+'px';
+  el.style.top=(ctr+r*Math.sin(rad))+'px';
 }
 
 // ═══════════════════════════════
-// TTS — SPRAAK
+// TTS
 // ═══════════════════════════════
-var ttsVoices = [];
-window.speechSynthesis.onvoiceschanged = function(){
-  ttsVoices = window.speechSynthesis.getVoices();
-};
+var ttsVoices=[];
+window.speechSynthesis.onvoiceschanged=function(){ ttsVoices=window.speechSynthesis.getVoices(); };
 
 function getBestVoice(lang){
-  var code = lang==='it' ? 'it' : 'nl';
-  return ttsVoices.find(function(v){ return v.lang.startsWith(code) && v.localService; })
+  var code=lang==='it'?'it':'nl';
+  return ttsVoices.find(function(v){ return v.lang.startsWith(code)&&v.localService; })
       || ttsVoices.find(function(v){ return v.lang.startsWith(code); })
       || null;
 }
 
 function speak(){
-  if(!S.lat || S.heading===null){ alert(T[LANG].ttsNone); return; }
-  var a = S.waypoints[S.activeTarget];
+  if(!S.lat||S.heading===null){ alert(T[LANG].ttsNone); return; }
+  var a=S.waypoints[S.activeTarget];
   if(!a.lat){ alert(T[LANG].ttsNone); return; }
-  var L = T[LANG];
-  var b    = brg(S.lat,S.lon, a.lat,a.lon);
-  var card = toCard(b);
-  var deg  = Math.round(b);
-  var dist = hav(S.lat,S.lon, a.lat,a.lon);
-  var distTxt, unit;
-  if(dist < 1){
-    distTxt = String(Math.round(dist*1000));
-    unit = Math.round(dist*1000)===1 ? L.distUnit[0] : L.distUnit[1];
+  var L=T[LANG];
+  var b=brg(S.lat,S.lon,a.lat,a.lon);
+  var card=toCard(b),deg=Math.round(b);
+  var dist=hav(S.lat,S.lon,a.lat,a.lon);
+  var distTxt,unit;
+  if(dist<1){
+    distTxt=String(Math.round(dist*1000));
+    unit=Math.round(dist*1000)===1?L.distUnit[0]:L.distUnit[1];
   } else {
-    distTxt = dist.toFixed(1).replace('.',',');
-    unit = dist < 2 ? L.distUnit[2] : L.distUnit[3];
+    distTxt=dist.toFixed(1).replace('.',',');
+    unit=dist<2?L.distUnit[2]:L.distUnit[3];
   }
-  var txt = L.ttsText(card, deg, distTxt, unit);
+  var txt=L.ttsText(card,deg,distTxt,unit);
   window.speechSynthesis.cancel();
-  var utt = new SpeechSynthesisUtterance(txt);
-  utt.lang  = LANG==='it' ? 'it-IT' : 'nl-NL';
-  var v = getBestVoice(LANG);
-  if(v) utt.voice = v;
-  utt.rate = 0.92; utt.pitch = 1.0; utt.volume = 1.0;
-  var ind = document.getElementById('tts-ind');
-  ind.style.display = 'inline-block';
-  utt.onend  = function(){ ind.style.display = 'none'; };
-  utt.onerror= function(){ ind.style.display = 'none'; };
+  var utt=new SpeechSynthesisUtterance(txt);
+  utt.lang=LANG==='it'?'it-IT':'nl-NL';
+  var v=getBestVoice(LANG);
+  if(v) utt.voice=v;
+  utt.rate=0.92; utt.pitch=1.0; utt.volume=1.0;
+  var ind=document.getElementById('tts-ind');
+  ind.style.display='inline-block';
+  utt.onend=function(){ ind.style.display='none'; };
+  utt.onerror=function(){ ind.style.display='none'; };
   window.speechSynthesis.speak(utt);
 }
 
 // ═══════════════════════════════
-// DEBUG (klein berichtje in info-panel)
+// DEBUG / BERICHTEN
 // ═══════════════════════════════
 function showDebug(msg){
-  var el = document.getElementById('debug-row');
-  el.style.display = 'block';
-  el.textContent = msg;
-  setTimeout(function(){ el.style.display='none'; el.textContent=''; }, 6000);
+  var el=document.getElementById('debug-row');
+  el.style.display='block'; el.textContent=msg;
+  setTimeout(function(){ el.style.display='none'; el.textContent=''; },6000);
 }
-
-function showMsg(m){
-  document.getElementById('error-msg').textContent = m;
-}
+function showMsg(m){ document.getElementById('error-msg').textContent=m; }
 
 // ═══════════════════════════════
-// INIT TAAL
+// INIT
 // ═══════════════════════════════
 applyLang();
-setActiveTarget(S.activeTarget, false);
+setActiveTarget(S.activeTarget,false);
 
 // ═══════════════════════════════
 // DEMO (?demo in URL)
 // ═══════════════════════════════
 if(location.search.includes('demo')){
-  S.lat = 51.3897; S.lon = 5.5345; // Hapert
-  initMap(S.lat, S.lon);
-  document.getElementById('status-gps').textContent = T[LANG].gps+': ✓ DEMO';
-  var demoH = 0;
+  S.lat=51.3897; S.lon=5.5345;
+  initMap(S.lat,S.lon);
+  document.getElementById('status-gps').textContent=T[LANG].gps+': ✓ DEMO';
+  S.waypoints.home={lat:52.3676,lon:4.9041,name:'Amsterdam'};
+  S.waypoints.dest={lat:51.5074,lon:-0.1278,name:'London'};
+  document.getElementById('inp-home').value='Amsterdam';
+  document.getElementById('inp-dest').value='London';
+  ['home','vac','dest','pers'].forEach(function(k){ refreshMarker(k); });
+  var demoH=0;
   setInterval(function(){
-    demoH = (demoH + 0.6) % 360;
-    S.heading = demoH;
-    document.getElementById('status-koers').textContent = T[LANG].course+': '+Math.round(demoH)+'°';
-    document.getElementById('heading-display').textContent = toCard(demoH)+' — '+Math.round(demoH)+'°';
-    rotateMap(demoH);
+    demoH=(demoH+0.6)%360;
+    S.heading=demoH;
+    document.getElementById('status-koers').textContent=T[LANG].course+': '+Math.round(demoH)+'°';
+    document.getElementById('heading-display').textContent=toCard(demoH)+' — '+Math.round(demoH)+'°';
+    // NORTH-UP: geen rotateMap()
     updateAll();
-  }, 50);
+  },50);
 }
 </script>
 </body>
